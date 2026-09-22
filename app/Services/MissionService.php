@@ -64,9 +64,13 @@ class MissionService
         // Pastikan progres lengkap walau misi baru ditambahkan setelah sesi dibuat.
         $this->syncMissingProgress($team);
 
+        // Hanya misi AKTIF yang ditampilkan. Misi lama yang sudah dinonaktifkan
+        // (mis. materi bab sebelumnya) tetap tersimpan di database untuk laporan
+        // guru, tapi tidak lagi muncul sebagai kartu di dashboard siswa.
         return TeamProgress::query()
             ->with('mission')
             ->where('team_id', $team->id)
+            ->whereHas('mission', fn ($query) => $query->active())
             ->get()
             ->sortBy(fn (TeamProgress $p) => $p->mission->order ?? 0)
             ->values();
