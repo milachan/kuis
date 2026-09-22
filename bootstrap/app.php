@@ -6,6 +6,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Support\ViewErrorBag;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -48,6 +49,11 @@ return Application::configure(basePath: dirname(__DIR__))
             // Halaman error khusus untuk 403 dan 404, sisanya pesan umum.
             if (in_array($status, [403, 404], true)) {
                 return response()->view('errors.custom', [
+                    // Middleware web tidak jalan pada route yang tidak cocok, jadi
+                    // bag $errors tidak ikut ter-share. Set eksplisit seperti yang
+                    // dilakukan Handler::renderHttpException() agar partial flash
+                    // tidak error saat halaman error dirender.
+                    'errors' => new ViewErrorBag,
                     'status' => $status,
                     'message' => $messages[$status],
                 ], $status);
