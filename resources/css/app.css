@@ -1,0 +1,160 @@
+@import 'tailwindcss';
+
+/*
+|--------------------------------------------------------------------------
+| TIK Mission — Tema Warna Game
+|--------------------------------------------------------------------------
+| Palet: dark navy, cyan/teal, putih, aksen kuning/oranye.
+| Menggunakan Tailwind CSS v4 (@theme) agar kelas seperti `bg-navy-900`
+| dan `text-cyan-accent` tersedia otomatis.
+*/
+
+@theme {
+    /* Dark navy — warna latar utama */
+    --color-navy-950: #060d1c;
+    --color-navy-900: #0a1428;
+    --color-navy-800: #10203c;
+    --color-navy-700: #16294a;
+    --color-navy-600: #1e3559;
+    --color-navy-500: #2a4470;
+
+    /* Cyan / teal — aksen utama */
+    --color-cyan-accent: #22d3ee;
+    --color-cyan-strong: #06b6d4;
+    --color-teal-accent: #2dd4bf;
+
+    /* Aksen kuning / oranye — highlight & peringatan */
+    --color-gold: #fbbf24;
+    --color-gold-strong: #f59e0b;
+    --color-amber-soft: #fcd34d;
+
+    /* Status */
+    --color-success: #34d399;
+    --color-danger: #f87171;
+    --color-warning: #fbbf24;
+
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* -----------------------------------------------------------------------
+| Utilitas ringan (tanpa dependency JS berat)
+----------------------------------------------------------------------- */
+
+@layer components {
+    /* Panel/tile dasar bergaya game */
+    .panel {
+        @apply rounded-xl border border-white/10 bg-navy-800/60 backdrop-blur-sm;
+    }
+
+    .panel-dark {
+        @apply rounded-xl border border-white/10 bg-navy-900/80;
+    }
+
+    /* Tombol utama (cyan) */
+    .btn-primary {
+        @apply inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-strong px-4 py-2.5
+               text-sm font-semibold text-navy-950 transition
+               hover:bg-cyan-accent focus:outline-none focus:ring-2 focus:ring-cyan-accent/60
+               focus:ring-offset-2 focus:ring-offset-navy-900 disabled:cursor-not-allowed disabled:opacity-50;
+    }
+
+    /* Tombol sekunder (garis) */
+    .btn-secondary {
+        @apply inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 px-4 py-2.5
+               text-sm font-semibold text-white/90 transition
+               hover:border-cyan-accent/60 hover:bg-white/5 focus:outline-none
+               focus:ring-2 focus:ring-cyan-accent/40 disabled:cursor-not-allowed disabled:opacity-50;
+    }
+
+    /* Tombol sukses (lulus validasi) */
+    .btn-success {
+        @apply inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5
+               text-sm font-semibold text-navy-950 transition hover:bg-emerald-400
+               focus:outline-none focus:ring-2 focus:ring-emerald-400/60 disabled:opacity-50;
+    }
+
+    /* Tombol bahaya / perbaikan */
+    .btn-danger {
+        @apply inline-flex items-center justify-center gap-2 rounded-lg bg-rose-500/90 px-4 py-2.5
+               text-sm font-semibold text-white transition hover:bg-rose-500
+               focus:outline-none focus:ring-2 focus:ring-rose-400/60 disabled:opacity-50;
+    }
+
+    /* Badge status */
+    .badge {
+        @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+    }
+
+    /* Input form */
+    .input-field {
+        @apply w-full rounded-lg border border-white/15 bg-navy-900/70 px-3 py-2.5
+               text-sm text-white placeholder-white/40 transition
+               focus:border-cyan-accent focus:outline-none focus:ring-2 focus:ring-cyan-accent/30;
+    }
+
+    .label-field {
+        @apply mb-1.5 block text-sm font-medium text-white/80;
+    }
+
+    /* Kartu misi */
+    .mission-card {
+        @apply relative overflow-hidden rounded-xl border p-4 transition duration-200;
+    }
+}
+
+/* Scrollbar tipis agar rapi di laboratorium */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #0a1428;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #1e3559;
+    border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #2a4470;
+}
+
+/* Animasi ringan — tidak membebani komputer lab */
+@keyframes tik-fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes tik-pulse-ring {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 0 6px rgba(34, 211, 238, 0);
+    }
+}
+
+.animate-fade-up {
+    animation: tik-fade-up 0.3s ease-out both;
+}
+
+.animate-pulse-ring {
+    animation: tik-pulse-ring 1.8s ease-in-out infinite;
+}
+
+/* Hormati preferensi pengguna yang sensitif terhadap gerakan */
+@media (prefers-reduced-motion: reduce) {
+    .animate-fade-up,
+    .animate-pulse-ring {
+        animation: none;
+    }
+}
