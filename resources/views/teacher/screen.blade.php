@@ -9,87 +9,46 @@
 @endpush
 
 @section('page-actions')
-    <a href="{{ route('teacher.sessions.show', $session) }}" class="btn-secondary">Kembali ke Sesi</a>
-    <button type="button" data-screen-fullscreen class="btn-secondary">Layar Penuh</button>
-    @if ($session->isEnded())
-        <form method="POST" action="{{ route('teacher.sessions.reopen', $session) }}">
-            @csrf
-            <button type="submit" class="btn-primary">Aktifkan Kembali</button>
-        </form>
-    @else
-        <form method="POST" action="{{ route('teacher.sessions.end', $session) }}"
-              data-confirm="Akhiri sesi ini? Semua kelompok berhenti dan kiriman baru ditolak.">
-            @csrf
-            <button type="submit" class="btn-danger">Akhiri Sesi</button>
-        </form>
-    @endif
+    <a href="{{ route('teacher.sessions.show', $session) }}" class="btn-secondary">⚙ Kendali Ronde</a>
+    <button type="button" data-screen-fullscreen class="btn-primary">Layar Penuh</button>
 @endsection
 
 @section('content')
 
-    {{-- Parameter ronde untuk kendali guru. --}}
+    {{-- Parameter ronde untuk tampilan. --}}
     @php
         $currentRound = $session->current_round;
         $roundStatus = $session->round_status;
-        $nextRound = $currentRound + 1;
-        $canStartNext = ! $session->isEnded() && $nextRound <= $totalRounds;
     @endphp
 
     <div data-screen-root
          data-session-id="{{ $session->id }}"
          data-live-url="{{ route('teacher.sessions.live', $session) }}">
 
-        {{-- ===================== PANEL KENDALI GURU ===================== --}}
-        <div class="panel mb-5 p-4">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-xs font-bold uppercase tracking-wider text-white/50">Kendali Ronde:</span>
-
-                    @if ($canStartNext)
-                        <form method="POST" action="{{ route('teacher.sessions.round.start', $session) }}">
-                            @csrf
-                            <input type="hidden" name="round" value="{{ $nextRound }}">
-                            <button type="submit" class="btn-primary">
-                                ▶ Mulai Ronde {{ $nextRound }}
-                            </button>
-                        </form>
-                    @endif
-
-                    @if ($roundStatus === 'running')
-                        <form method="POST" action="{{ route('teacher.sessions.round.end', $session) }}">
-                            @csrf
-                            <button type="submit" class="btn-secondary">⏹ Akhiri Ronde {{ $currentRound }}</button>
-                        </form>
-                    @endif
-
-                    @if ($currentRound > 0 || $roundStatus !== 'idle')
-                        <form method="POST" action="{{ route('teacher.sessions.round.reset', $session) }}"
-                              data-confirm="Kembalikan sesi ke mode lobi (ronde nol)?">
-                            @csrf
-                            <button type="submit" class="btn-secondary">↺ Mode Lobi</button>
-                        </form>
-                    @endif
-
-                    <form method="POST" action="{{ route('teacher.sessions.lobby', $session) }}">
-                        @csrf
-                        <button type="submit" class="btn-secondary">
-                            {{ $session->lobby_locked ? '🔓 Buka Lobi' : '🔒 Kunci Lobi' }}
-                        </button>
-                    </form>
-                </div>
-
-                <div class="flex items-center gap-2 text-xs">
-                    @if ($session->lobby_locked)
-                        <span class="badge bg-amber-500/15 text-amber-200">LOBI TERKUNCI</span>
-                    @else
-                        <span class="badge bg-emerald-500/15 text-emerald-200">LOBI TERBUKA</span>
-                    @endif
-                    <span class="text-white/40" data-ai-indicator>AI: memeriksa…</span>
+        {{--
+            Layar proyektor ini MURNI TAMPILAN: tidak ada tombol kendali ronde
+            di sini supaya guru tidak bingung memilih layar. Kendali ronde ada
+            di halaman sesi (tombol "Kendali Ronde" di atas).
+        --}}
+        <div class="panel mb-5 flex flex-wrap items-center justify-between gap-3 p-4">
+            <div class="flex items-center gap-2">
+                <span class="text-xl">📺</span>
+                <div>
+                    <p class="text-sm font-bold">Layar Proyektor</p>
+                    <p class="text-xs text-white/50">
+                        Tampilan untuk siswa. Kendalikan ronde dari halaman sesi guru.
+                    </p>
                 </div>
             </div>
-            <p class="mt-2 text-xs text-white/40">
-                Tombol di atas juga tersedia di halaman ini agar guru tidak perlu berpindah tab saat mengajar.
-            </p>
+
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+                @if ($session->lobby_locked)
+                    <span class="badge bg-amber-500/15 text-amber-200">SISWA BARU TIDAK BISA MASUK</span>
+                @else
+                    <span class="badge bg-emerald-500/15 text-emerald-200">SISWA BARU BISA MASUK</span>
+                @endif
+                <span class="text-white/40" data-ai-indicator>AI: memeriksa…</span>
+            </div>
         </div>
 
         {{-- ===================== BAGIAN BESAR UNTUK PROYEKTOR ===================== --}}

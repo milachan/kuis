@@ -11,7 +11,7 @@
 
     @stack('scripts')
 </head>
-<body class="min-h-screen bg-navy-950 font-sans text-white antialiased">
+<body class="min-h-screen bg-sky-50 font-sans text-ink-900 antialiased">
 
     {{-- Toast container --}}
     <div id="tik-toast-container"
@@ -21,34 +21,34 @@
 
     {{-- ============ BANNER RONDE BARU (diisi oleh round-watch.js) ============ --}}
     <div id="round-banner" class="hidden mx-auto max-w-6xl px-4 pt-4">
-        <div class="flex flex-wrap items-center gap-3 rounded-xl border border-cyan-accent/40 bg-cyan-strong/15 p-4">
+        <div class="flex flex-wrap items-center gap-3 rounded-2xl border-2 border-sky-300 bg-white p-4 shadow-sm">
             <span class="text-2xl">🚀</span>
             <div class="min-w-0 flex-1">
-                <p id="round-banner-title" class="text-sm font-bold text-cyan-accent"></p>
-                <p id="round-banner-text" class="mt-0.5 text-xs text-white/70"></p>
+                <p id="round-banner-title" class="text-sm font-black text-sky-600"></p>
+                <p id="round-banner-text" class="mt-0.5 text-xs text-ink-700"></p>
             </div>
             <a id="round-banner-button" href="#" class="btn-primary hidden px-4 py-2 text-sm">Kerjakan Sekarang</a>
             <button type="button"
                     data-round-banner-close
-                    class="rounded-lg border border-white/20 px-3 py-2 text-xs text-white/60 hover:text-white">
+                    class="rounded-xl border-2 border-sky-200 px-3 py-2 text-xs font-bold text-ink-600 hover:bg-sky-50">
                 Tutup
             </button>
         </div>
     </div>
 
     {{-- ============================ HEADER ============================ --}}
-    <header class="sticky top-0 z-40 border-b border-white/10 bg-navy-900/95 backdrop-blur">
+    <header class="sticky top-0 z-40 border-b-2 border-sky-100 bg-white/95 backdrop-blur">
         <div class="mx-auto max-w-6xl px-4 py-3">
 
             <div class="flex items-center justify-between gap-3">
                 {{-- Brand --}}
                 <a href="{{ route('student.dashboard') }}" class="flex items-center gap-2.5">
-                    <span class="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-cyan-accent to-teal-accent text-lg font-black text-navy-950">
-                        T
+                    <span class="grid h-10 w-10 place-items-center rounded-2xl bg-sky-500 text-xl font-black text-white shadow-sm">
+                        🎓
                     </span>
                     <span class="leading-tight">
-                        <span class="block text-sm font-bold tracking-wide">TIK MISSION</span>
-                        <span class="block text-[11px] text-cyan-accent/80">Operasi File Rahasia</span>
+                        <span class="block text-sm font-black tracking-wide text-ink-900">TIK MISSION</span>
+                        <span class="block text-[11px] font-semibold text-sky-600">Bab 4 · Sistem Komputer</span>
                     </span>
                 </a>
 
@@ -56,14 +56,14 @@
                 <div class="flex items-center gap-2">
                     <button type="button"
                             data-sound-toggle
-                            class="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs font-medium text-white/70 transition hover:border-cyan-accent/50 hover:text-white">
-                        🔇 Sound OFF
+                            class="rounded-xl border-2 border-sky-200 bg-white px-3 py-1.5 text-xs font-bold text-ink-700 transition hover:bg-sky-50">
+                        🔇 Suara Mati
                     </button>
 
                     <form method="POST" action="{{ route('student.leave') }}" data-confirm="Keluar dari sesi kelompok?">
                         @csrf
                         <button type="submit"
-                                class="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-rose-400/50 hover:text-rose-200">
+                                class="rounded-xl border-2 border-coral-400/40 bg-white px-3 py-1.5 text-xs font-bold text-coral-500 transition hover:bg-coral-400/10">
                             Keluar
                         </button>
                     </form>
@@ -74,32 +74,32 @@
             @isset($team)
                 <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {{-- Kelompok --}}
-                    <div class="rounded-lg border border-white/10 bg-navy-800/50 px-3 py-2">
-                        <p class="text-[10px] uppercase tracking-wider text-white/50">Kelompok</p>
-                        <p class="truncate text-sm font-bold text-cyan-accent">{{ $team->name }}</p>
+                    <div class="rounded-2xl border-2 border-sky-100 bg-sky-50 px-3 py-2">
+                        <p class="text-[10px] font-bold uppercase tracking-wider text-ink-500">Kelompok</p>
+                        <p class="truncate text-sm font-black text-sky-600">{{ $team->name }}</p>
                     </div>
 
                     {{-- XP --}}
-                    <div class="rounded-lg border border-white/10 bg-navy-800/50 px-3 py-2">
-                        <p class="text-[10px] uppercase tracking-wider text-white/50">XP</p>
-                        <p class="text-sm font-bold text-gold">{{ $team->xp }}</p>
+                    <div class="rounded-2xl border-2 border-sun-400/30 bg-sun-300/20 px-3 py-2">
+                        <p class="text-[10px] font-bold uppercase tracking-wider text-ink-500">XP</p>
+                        <p class="text-sm font-black text-ink-800">{{ $team->xp }}</p>
                     </div>
 
                     {{-- Progres --}}
-                    <div class="rounded-lg border border-white/10 bg-navy-800/50 px-3 py-2">
-                        <p class="text-[10px] uppercase tracking-wider text-white/50">Progres</p>
-                        <p class="text-sm font-bold text-white">{{ $completed ?? 0 }}/{{ $total ?? 0 }}</p>
+                    <div class="rounded-2xl border-2 border-mint-400/30 bg-mint-400/10 px-3 py-2">
+                        <p class="text-[10px] font-bold uppercase tracking-wider text-ink-500">Progres</p>
+                        <p class="text-sm font-black text-ink-800">{{ $completed ?? 0 }}/{{ $total ?? 0 }}</p>
                     </div>
 
                     {{-- Timer --}}
-                    <div class="rounded-lg border border-white/10 bg-navy-800/50 px-3 py-2">
-                        <p class="text-[10px] uppercase tracking-wider text-white/50">Sisa Waktu</p>
+                    <div class="rounded-2xl border-2 border-grape-400/30 bg-grape-400/10 px-3 py-2">
+                        <p class="text-[10px] font-bold uppercase tracking-wider text-ink-500">Sisa Waktu</p>
                         @if ($session->hasTimer())
-                            <p class="text-sm font-bold text-white" data-timer="{{ $session->secondsRemaining() }}">
+                            <p class="text-sm font-black text-ink-800" data-timer="{{ $session->secondsRemaining() }}">
                                 {{ $session->formattedRemaining() }}
                             </p>
                         @else
-                            <p class="text-sm font-bold text-white/60">Tanpa batas</p>
+                            <p class="text-sm font-black text-ink-500">Tanpa batas</p>
                         @endif
                     </div>
                 </div>
@@ -112,8 +112,8 @@
         @yield('content')
     </main>
 
-    <footer class="mx-auto max-w-6xl px-4 pb-8 pt-2 text-center text-xs text-white/40">
-        TIK Mission · Informatika Kelas 8 SMP/MTs · Bab 3 Teknologi Informasi dan Komunikasi
+    <footer class="mx-auto max-w-6xl px-4 pb-8 pt-2 text-center text-xs font-semibold text-ink-500">
+        TIK Mission · Informatika Kelas 8 MTs · Bab 4 Sistem Komputer
     </footer>
 
 </body>

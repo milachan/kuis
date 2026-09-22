@@ -2,38 +2,77 @@
 
 /*
 |--------------------------------------------------------------------------
-| TIK Mission — Tema Warna Game
+| TIK Mission — Tema Ceria untuk Siswa Madrasah Kelas 8
 |--------------------------------------------------------------------------
-| Palet: dark navy, cyan/teal, putih, aksen kuning/oranye.
-| Menggunakan Tailwind CSS v4 (@theme) agar kelas seperti `bg-navy-900`
-| dan `text-cyan-accent` tersedia otomatis.
+| Prinsip desain (ramah anak, tetap rapi):
+|  - Warna cerah & hangat, bukan gelap: langit, mint, kuning matahari, koral.
+|  - Kontras teks minimal 4.5:1 agar mudah dibaca di proyektor & layar lab.
+|  - Sudut membulat besar, bayangan lembut, tanpa gradien neon.
+|  - Animasi halus & singkat, dihormati oleh prefers-reduced-motion.
+|  - Ikon memakai emoji/SVG sederhana yang dikenali anak.
 */
 
 @theme {
-    /* Dark navy — warna latar utama */
+    /* Latar cerah — kertas & langit */
+    --color-sky-50: #eff9ff;
+    --color-sky-100: #dff2fe;
+    --color-sky-200: #b8e6fd;
+    --color-sky-300: #7dd3fc;
+    --color-sky-400: #38bdf8;
+    --color-sky-500: #0ea5e9;
+    --color-sky-600: #0284c7;
+    --color-sky-700: #0369a1;
+
+    /* Teks utama — biru tua lembut (kontras tinggi di atas latar terang) */
+    --color-ink-900: #0f2a43;
+    --color-ink-800: #17405f;
+    --color-ink-700: #1e567c;
+    --color-ink-600: #2b6d96;
+    --color-ink-500: #4a86ab;
+
+    /* Permukaan kartu */
+    --color-surface: #ffffff;
+    --color-surface-soft: #f4fbff;
+    --color-surface-line: #d6eaf7;
+
+    /* Aksen ceria */
+    --color-mint-400: #34d399;
+    --color-mint-500: #10b981;
+    --color-mint-600: #059669;
+
+    --color-sun-300: #fcd34d;
+    --color-sun-400: #fbbf24;
+    --color-sun-500: #f59e0b;
+
+    --color-coral-400: #fb7185;
+    --color-coral-500: #f43f5e;
+
+    --color-grape-400: #a78bfa;
+    --color-grape-500: #8b5cf6;
+
+    /* Status (kontras aman) */
+    --color-success: #059669;
+    --color-danger: #e11d48;
+    --color-warning: #b45309;
+
+    /* Alias lama dipertahankan agar tampilan guru & layar tetap berfungsi. */
     --color-navy-950: #060d1c;
     --color-navy-900: #0a1428;
     --color-navy-800: #10203c;
     --color-navy-700: #16294a;
     --color-navy-600: #1e3559;
     --color-navy-500: #2a4470;
-
-    /* Cyan / teal — aksen utama */
     --color-cyan-accent: #22d3ee;
     --color-cyan-strong: #06b6d4;
     --color-teal-accent: #2dd4bf;
-
-    /* Aksen kuning / oranye — highlight & peringatan */
     --color-gold: #fbbf24;
     --color-gold-strong: #f59e0b;
     --color-amber-soft: #fcd34d;
 
-    /* Status */
-    --color-success: #34d399;
-    --color-danger: #f87171;
-    --color-warning: #fbbf24;
-
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+
+    /* Sudut membulat khas aplikasi anak */
+    --radius-kid: 1.25rem;
 }
 
 /* -----------------------------------------------------------------------
@@ -41,7 +80,16 @@
 ----------------------------------------------------------------------- */
 
 @layer components {
-    /* Panel/tile dasar bergaya game */
+    /* Kartu terang dengan bayangan lembut */
+    .card-bright {
+        @apply rounded-3xl border border-sky-100 bg-white p-5 shadow-sm;
+    }
+
+    .card-soft {
+        @apply rounded-3xl border border-sky-100 bg-sky-50 p-5;
+    }
+
+    /* Panel bergaya lama (dipakai halaman guru & layar proyektor). */
     .panel {
         @apply rounded-xl border border-white/10 bg-navy-800/60 backdrop-blur-sm;
     }
@@ -50,75 +98,76 @@
         @apply rounded-xl border border-white/10 bg-navy-900/80;
     }
 
-    /* Tombol utama (cyan) */
+    /* Tombol utama — biru langit cerah */
     .btn-primary {
-        @apply inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-strong px-4 py-2.5
-               text-sm font-semibold text-navy-950 transition
-               hover:bg-cyan-accent focus:outline-none focus:ring-2 focus:ring-cyan-accent/60
-               focus:ring-offset-2 focus:ring-offset-navy-900 disabled:cursor-not-allowed disabled:opacity-50;
+        @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-3
+               text-sm font-bold text-white shadow-sm transition
+               hover:bg-sky-600 focus:outline-none focus:ring-4 focus:ring-sky-300/60
+               disabled:cursor-not-allowed disabled:opacity-50;
     }
 
-    /* Tombol sekunder (garis) */
+    /* Tombol sekunder — putih bergaris */
     .btn-secondary {
-        @apply inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 px-4 py-2.5
-               text-sm font-semibold text-white/90 transition
-               hover:border-cyan-accent/60 hover:bg-white/5 focus:outline-none
-               focus:ring-2 focus:ring-cyan-accent/40 disabled:cursor-not-allowed disabled:opacity-50;
+        @apply inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-sky-200
+               bg-white px-5 py-3 text-sm font-bold text-ink-700 transition
+               hover:border-sky-400 hover:bg-sky-50 focus:outline-none
+               focus:ring-4 focus:ring-sky-200/70 disabled:cursor-not-allowed disabled:opacity-50;
     }
 
-    /* Tombol sukses (lulus validasi) */
+    /* Tombol sukses — hijau mint */
     .btn-success {
-        @apply inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5
-               text-sm font-semibold text-navy-950 transition hover:bg-emerald-400
-               focus:outline-none focus:ring-2 focus:ring-emerald-400/60 disabled:opacity-50;
+        @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-mint-500 px-5 py-3
+               text-sm font-bold text-white shadow-sm transition hover:bg-mint-600
+               focus:outline-none focus:ring-4 focus:ring-mint-400/50 disabled:opacity-50;
     }
 
-    /* Tombol bahaya / perbaikan */
+    /* Tombol bahaya */
     .btn-danger {
-        @apply inline-flex items-center justify-center gap-2 rounded-lg bg-rose-500/90 px-4 py-2.5
-               text-sm font-semibold text-white transition hover:bg-rose-500
-               focus:outline-none focus:ring-2 focus:ring-rose-400/60 disabled:opacity-50;
+        @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-coral-500 px-5 py-3
+               text-sm font-bold text-white shadow-sm transition hover:bg-coral-400
+               focus:outline-none focus:ring-4 focus:ring-coral-400/50 disabled:opacity-50;
     }
 
-    /* Badge status */
+    /* Badge status — selalu berpasangan dengan teks, bukan warna saja */
     .badge {
-        @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+        @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold;
     }
 
-    /* Input form */
+    /* Input form terang */
     .input-field {
-        @apply w-full rounded-lg border border-white/15 bg-navy-900/70 px-3 py-2.5
-               text-sm text-white placeholder-white/40 transition
-               focus:border-cyan-accent focus:outline-none focus:ring-2 focus:ring-cyan-accent/30;
+        @apply w-full rounded-2xl border-2 border-sky-200 bg-white px-4 py-3
+               text-sm text-ink-900 placeholder-ink-500/60 transition
+               focus:border-sky-500 focus:outline-none focus:ring-4 focus:ring-sky-200/70;
     }
 
     .label-field {
-        @apply mb-1.5 block text-sm font-medium text-white/80;
+        @apply mb-1.5 block text-sm font-bold text-ink-800;
     }
 
     /* Kartu misi */
     .mission-card {
-        @apply relative overflow-hidden rounded-xl border p-4 transition duration-200;
+        @apply relative block overflow-hidden rounded-3xl border-2 border-sky-100 bg-white p-4
+               shadow-sm transition duration-200;
     }
 }
 
-/* Scrollbar tipis agar rapi di laboratorium */
+/* Scrollbar lembut */
 ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-    background: #0a1428;
+    background: #eff9ff;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #1e3559;
+    background: #b8e6fd;
     border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #2a4470;
+    background: #7dd3fc;
 }
 
 /* Animasi ringan — tidak membebani komputer lab */
@@ -136,10 +185,21 @@
 @keyframes tik-pulse-ring {
     0%,
     100% {
-        box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.5);
+        box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.45);
     }
     50% {
-        box-shadow: 0 0 0 6px rgba(34, 211, 238, 0);
+        box-shadow: 0 0 0 8px rgba(14, 165, 233, 0);
+    }
+}
+
+/* Goyangan lembut untuk mengajak klik */
+@keyframes tik-bob {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-6px);
     }
 }
 
@@ -151,10 +211,72 @@
     animation: tik-pulse-ring 1.8s ease-in-out infinite;
 }
 
+.animate-bob {
+    animation: tik-bob 2.4s ease-in-out infinite;
+}
+
 /* Hormati preferensi pengguna yang sensitif terhadap gerakan */
 @media (prefers-reduced-motion: reduce) {
     .animate-fade-up,
-    .animate-pulse-ring {
+    .animate-pulse-ring,
+    .animate-bob {
         animation: none;
     }
+}
+
+/* -----------------------------------------------------------------------
+| Mode layar penuh untuk game siswa
+| -----------------------------------------------------------------------
+| Papan permainan dan panel soal berada di dalam panggung yang sama
+| (lihat student/game.blade.php), sehingga soal TETAP TERLIHAT saat layar
+| penuh. Tata letak dibuat dua kolom: papan di kiri, soal di kanan.
+*/
+.tik-game-layout {
+    display: grid;
+    gap: 1rem;
+}
+
+@media (min-width: 1024px) {
+    .tik-game-layout {
+        grid-template-columns: 1.6fr 1fr;
+        align-items: start;
+    }
+}
+
+.tik-game-stage:fullscreen {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    padding: 1.25rem;
+    overflow-y: auto;
+    border: 0;
+    border-radius: 0;
+    background: #eff9ff;
+}
+
+.tik-game-stage:fullscreen .tik-game-layout {
+    grid-template-columns: 1.6fr 1fr;
+    align-items: start;
+}
+
+.tik-game-stage:fullscreen canvas {
+    width: 100%;
+    height: auto;
+    max-height: 60vh;
+    aspect-ratio: auto;
+    object-fit: contain;
+}
+
+/* Soal harus tetap terbaca jelas saat layar penuh. */
+.tik-game-stage:fullscreen .tik-game-question {
+    max-height: 76vh;
+    overflow-y: auto;
+}
+
+/* Sembunyikan bagian yang tidak perlu saat fokus bermain. */
+.tik-game-stage:fullscreen .tik-hide-fs {
+    display: none !important;
 }

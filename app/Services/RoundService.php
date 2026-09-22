@@ -50,6 +50,117 @@ class RoundService
     }
 
     /**
+     * Nomor ronde berikutnya yang harus dibuka.
+     *
+     * Dipakai tombol tunggal "Ronde Berikutnya": guru tidak perlu tahu
+     * ronde berapa yang sedang berjalan, sistem yang menentukannya.
+     * Mengembalikan null bila semua ronde sudah dijalankan.
+     */
+    public function nextRoundNumber(GameSession $session): ?int
+    {
+        $total = $this->totalRounds();
+
+        if ($total === 0) {
+            return null;
+        }
+
+        // Ronde yang sudah pernah dibuka (status bukan idle) dianggap lewat.
+        $sudahJalan = (int) $session->current_round;
+
+        if ($session->round_status === GameSession::ROUND_RUNNING) {
+            // Ronde sedang berjalan: berikutnya adalah ronde setelah ini.
+            $berikutnya = $sudahJalan + 1;
+        } else {
+            // Belum mulai / sudah diakhiri: lanjutkan dari ronde terakhir + 1.
+            $berikutnya = $sudahJalan + 1;
+        }
+
+        return $berikutnya <= $total ? $berikutnya : null;
+    }
+
+    /**
+     * Buka ronde mana saja — termasuk ronde yang sudah lewat (mundur).
+     *
+     * Dipakai guru untuk memilih ronde langsung dari daftar ronde, bukan
+     * hanya maju satu per satu. Berbeda dari `start()`, semua ronde SELAIN
+     * ronde yang dibuka akan ditutup, sehingga guru bisa kembali ke ronde
+     * sebelumnya walau sudah maju ke ronde berikutnya.
+     *
+     * XP dan jawaban yang sudah terkumpul TIDAK dihapus, jadi mengulang
+     * ronde tidak merusak skor murid.
+     */
+    public function openRound(GameSession $session, int $round, ?int $durationMinutes = null): GameSession
+    {
+        $mission = $this->missionForRound($round);
+
+        if (! $mission) {
+            return $session;
+        }
+
+        DB::transaction(function () use ($session, $mission, $round, $durationMinutes) {
+            // Tutup semua ronde lain (baik sebelum maupun sesudah ronde ini),
+            // supaya hanya SATU ronde yang bisa dikerjakan pada satu waktu.
+            $this->closeOtherRounds($session, $round);
+
+            $session->update([
+                'current_round' => $round,
+                'round_status' => GameSession::ROUND_RUNNING,
+                'round_started_at' => now(),
+                'round_duration_minutes' => $durationMinutes ?? $session->round_duration_minutes,
+                'lobby_locked' => true,
+            ]);
+
+            // Buka misi ronde pilihan untuk semua kelompok.
+            foreach ($session->teams as $team) {
+                $this->missions->unlockManually($team, $mission);
+            }
+        });
+
+        return $session->refresh();
+    }
+
+    /**
+     * Tutup SEMUA misi kecuali ronde yang sedang dibuka.
+     *
+     * Misi yang sudah selesai / menunggu validasi dibiarkan, karena
+     * jawabannya sudah masuk dan XP-nya harus tetap aman. Yang ditutup
+     * hanya misi yang masih bisa dikerjakan.
+     */
+    protected function closeOtherRounds(GameSession $session, int $currentRound): void
+    {
+        $missionLain = Mission::query()
+            ->active()
+            ->where('order', '!=', $currentRound)
+            ->pluck('id')
+            ->all();
+
+        if ($missionLain === []) {
+            return;
+        }
+
+        TeamProgress::query()
+            ->whereIn('team_id', $session->teams()->select('id'))
+            ->whereIn('mission_id', $missionLain)
+            ->where('late_entry', false)
+            ->whereIn('status', [
+                TeamProgress::STATUS_AVAILABLE,
+                TeamProgress::STATUS_IN_PROGRESS,
+            ])
+            ->update([
+                'status' => TeamProgress::STATUS_LOCKED,
+                'work_started_at' => null,
+            ]);
+    }
+
+    /**
+     * Nomor ronde yang sedang dibuka, atau null bila belum ada.
+     */
+    public function currentRoundNumber(GameSession $session): ?int
+    {
+        return $session->current_round > 0 ? (int) $session->current_round : null;
+    }
+
+    /**
      * Mulai sebuah ronde: buka misinya untuk semua kelompok dan nyalakan timer.
      */
     public function start(GameSession $session, int $round, ?int $durationMinutes = null): GameSession
@@ -61,6 +172,10 @@ class RoundService
         }
 
         DB::transaction(function () use ($session, $mission, $round, $durationMinutes) {
+            // Tutup ronde sebelumnya: misi ronde lama tidak boleh dikirim lagi,
+            // supaya siswa tidak bisa mengerjakan ronde lama diam-diam.
+            $this->closePreviousRounds($session, $round);
+
             $session->update([
                 'current_round' => $round,
                 'round_status' => GameSession::ROUND_RUNNING,
@@ -77,6 +192,48 @@ class RoundService
         });
 
         return $session->refresh();
+    }
+
+    /**
+     * Tutup misi ronde-ronde lama (nomor lebih kecil dari ronde saat ini).
+     *
+     * Misi yang sudah selesai / menunggu validasi TIDAK diubah, karena
+     * jawabannya sudah masuk dan tetap tersimpan. Yang ditutup hanya misi
+     * yang masih bisa dikerjakan, agar tidak bisa dikirim setelah ronde lewat.
+     *
+     * Kekecualian: kelompok yang masuk terlambat (`late_entry`) tetap boleh
+     * mengerjakan misi ronde 1, supaya murid yang baru bergabung setelah
+     * permainan berjalan tidak kehilangan kesempatan memulai.
+     */
+    protected function closePreviousRounds(GameSession $session, int $currentRound): void
+    {
+        if ($currentRound <= 1) {
+            return;
+        }
+
+        $missionLama = Mission::query()
+            ->active()
+            ->where('order', '<', $currentRound)
+            ->pluck('id')
+            ->all();
+
+        if ($missionLama === []) {
+            return;
+        }
+
+        TeamProgress::query()
+            ->whereIn('team_id', $session->teams()->select('id'))
+            ->whereIn('mission_id', $missionLama)
+            // Pendatang baru tidak dikunci: mereka baru mulai dari ronde 1.
+            ->where('late_entry', false)
+            ->whereIn('status', [
+                TeamProgress::STATUS_AVAILABLE,
+                TeamProgress::STATUS_IN_PROGRESS,
+            ])
+            ->update([
+                'status' => TeamProgress::STATUS_LOCKED,
+                'work_started_at' => null,
+            ]);
     }
 
     /**

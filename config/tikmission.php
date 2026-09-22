@@ -29,6 +29,15 @@ return [
     // Bonus XP jika misi diselesaikan sebelum tenggat timer sesi.
     'on_time_bonus_xp' => 10,
 
+    // Bonus XP bila AI menilai jawaban memakai BAHASA SENDIRI siswa
+    // (bukan hasil salinan), meskipun isi jawabannya kurang tepat.
+    // Tujuannya menghargai usaha berpikir dan menulis sendiri.
+    'own_words_bonus_xp' => 15,
+
+    // Bobot XP dari GAME ARCADE (persen dari XP maksimum misi).
+    // Sisanya (20%) menjadi bonus dari skor permainan.
+    'game_xp_weight_percent' => 80,
+
     // Default XP per misi bila misi tidak mendefinisikan XP sendiri.
     'default_mission_xp' => 100,
 

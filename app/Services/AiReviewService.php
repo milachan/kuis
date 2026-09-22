@@ -128,6 +128,7 @@ class AiReviewService
             'ai_reviewed_at' => now(),
             'authenticity_score' => $authenticity,
             'authenticity_note' => $parsed['catatan_keaslian'] ?? null,
+            'own_words' => $parsed['bahasa_sendiri'] ?? null,
         ])->save();
     }
 
@@ -195,8 +196,16 @@ class AiReviewService
         detail pengalaman pribadi, sebaiknya ditanya lisan." Jangan menulis kata "curang"/"mencontek".
         Ingat: tulisan rapi BUKAN bukti menyalin. Bila ragu, pilih 3.
 
+        BAHASA SENDIRI (untuk bonus usaha):
+        Isi "bahasa_sendiri" dengan true bila siswa jelas berusaha menjawab dengan
+        PIKIRAN DAN KATA-KATANYA SENDIRI, walau isi jawabannya kurang tepat atau salah.
+        Isi false bila jawaban hasil salinan, atau siswa hanya menulis ulang pertanyaan,
+        atau mengosongkan jawaban.
+        PENTING: "bahasa_sendiri" bernilai true MESKIPUN jawabannya salah, selama siswa
+        benar-benar mencoba menjelaskan dengan bahasanya sendiri. Ini untuk menghargai usaha.
+
         Balas HANYA dengan JSON valid tanpa penjelasan tambahan, memakai struktur:
-        {"skor": <angka 0-100 keseluruhan>, "umpan_balik": "<2-3 kalimat>", "kriteria": [{"kriteria": "<nama>", "nilai": <0-100>, "catatan": "<singkat>"}], "keaslian": <1-5>, "catatan_keaslian": "<maks 2 kalimat>"}
+        {"skor": <angka 0-100 keseluruhan>, "umpan_balik": "<2-3 kalimat>", "kriteria": [{"kriteria": "<nama>", "nilai": <0-100>, "catatan": "<singkat>"}], "keaslian": <1-5>, "catatan_keaslian": "<maks 2 kalimat>", "bahasa_sendiri": <true|false>}
         Isi "kriteria" dengan satu butir per pertanyaan (pakai nomor pertanyaan pada nama kriteria),
         lalu tambahkan satu butir penutup bernama "Keseluruhan".
         PROMPT;
@@ -315,6 +324,10 @@ class AiReviewService
                 : null,
             'catatan_keaslian' => isset($data['catatan_keaslian'])
                 ? (string) $data['catatan_keaslian']
+                : null,
+            // Apakah siswa menjawab dengan bahasanya sendiri (untuk bonus usaha).
+            'bahasa_sendiri' => isset($data['bahasa_sendiri'])
+                ? filter_var($data['bahasa_sendiri'], FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE)
                 : null,
         ];
     }

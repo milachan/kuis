@@ -8,21 +8,20 @@ use App\Models\MissionCode;
 use Illuminate\Database\Seeder;
 
 /**
- * Materi penuh Bab 3 — Teknologi Informasi dan Komunikasi (Kelas VIII).
+ * Materi Bab 4 — Sistem Komputer (Kelas VIII MTs).
  *
- * Sumber: Buku Siswa Informatika KLS VIII, halaman 63-88.
- * Dipecah menjadi 10 ronde pendek. Setiap ronde berisi 4 pertanyaan yang
- * dijawab SINGKAT (1-2 kalimat) supaya siswa tidak keberatan mengetik, dan
- * satu di antaranya menanyakan PENGALAMAN PRIBADI agar jawaban sulit
- * dijawab hanya dengan menyalin dari AI.
+ * Sumber: Buku Siswa Informatika KLS VIII, halaman 78-95.
  *
- * Tidak ada kewajiban mengunggah file bukti.
+ * Format: 7 ronde, SETIAP RONDE PUNYA GAME ARCADE BERBEDA.
+ * Soal materi menjadi MEKANIK permainan:
+ *   - jawab benar -> tenaga/skor bertambah
+ *   - jawab salah -> nyawa berkurang
+ * Jadi anak belajar sambil bermain game klasik (ular, breakout, flappy).
  *
- * Subbab buku:
- *   A. Perangkat Lunak Aplikasi dan Fitur Aplikasi
- *   B. Pembuatan Laporan
- *   C. Merangkum Narasi dari Konten Digital
- *   D. Laboratorium Maya
+ * Setiap ronde juga menyediakan beberapa soal uraian pendek untuk
+ * memperdalam pemahaman (dinilai AI).
+ *
+ * Tidak ada kewajiban mengunggah file.
  */
 class Bab3MateriSeeder extends Seeder
 {
@@ -42,16 +41,11 @@ class Bab3MateriSeeder extends Seeder
 
         $this->selaraskanSesiDemo($missions);
 
-        $this->command?->info('Materi Bab 3 selesai: '.count($missions).' misi (10 ronde).');
+        $this->command?->info('Materi Bab 4 selesai: '.count($missions).' ronde dengan game arcade.');
     }
 
     /**
-     * Pindahkan nomor urut misi lama ke gugus 900-an agar tidak bentrok
-     * dengan nomor 1-10 milik kurikulum baru.
-     *
-     * Misi lama yang masih punya progres milik kelompok (mis. sesi yang sudah
-     * pernah dipakai) tidak dihapus supaya nilai siswa tidak hilang, tetapi
-     * dikeluarkan dari daftar ronde aktif.
+     * Pindahkan nomor urut misi lama ke gugus 900-an agar tidak bentrok.
      */
     protected function geserNomorMisiLama(): void
     {
@@ -62,8 +56,6 @@ class Bab3MateriSeeder extends Seeder
             ->where('order', '<', 900)
             ->update(['is_active' => false]);
 
-        // Nomor besar dipakai agar tidak bertabrakan; diurutkan mundur supaya
-        // tidak ada bentrok sementara saat nomor baru ditulis.
         $lama = Mission::query()
             ->whereNotIn('slug', $slugsBaru)
             ->orderByDesc('order')
@@ -78,7 +70,7 @@ class Bab3MateriSeeder extends Seeder
     }
 
     /**
-     * Hapus misi lama yang tidak ada di kurikulum baru dan tidak punya data.
+     * Hapus misi lama yang tidak dipakai dan tidak punya data siswa.
      */
     protected function hapusMisiLama(): void
     {
@@ -92,7 +84,7 @@ class Bab3MateriSeeder extends Seeder
     }
 
     /**
-     * Sesi demo dibuat/disesuaikan agar memakai 10 misi baru + kode rahasia.
+     * Sesi demo memakai 7 ronde baru + kode rahasia.
      *
      * @param  array<string, Mission>  $missions
      */
@@ -101,7 +93,7 @@ class Bab3MateriSeeder extends Seeder
         $session = GameSession::query()->updateOrCreate(
             ['code' => 'TIK8-DEMO'],
             [
-                'name' => 'Sesi Demo — Bab 3 TIK Kelas 8',
+                'name' => 'Sesi Demo — Bab 4 Sistem Komputer',
                 'duration_minutes' => 0,
                 'start_time' => now(),
                 'end_time' => null,
@@ -117,8 +109,6 @@ class Bab3MateriSeeder extends Seeder
             ]
         );
 
-        // Bersihkan kode rahasia milik misi lama yang sudah tidak dipakai,
-        // supaya guru tidak melihat kode "hantu" di halaman sesi.
         MissionCode::query()
             ->where('game_session_id', $session->id)
             ->whereNotIn('mission_id', collect($missions)->pluck('id')->all())
@@ -147,23 +137,21 @@ class Bab3MateriSeeder extends Seeder
     protected function kodeRahasia(): array
     {
         return [
-            'perangkat-lunak-fitur' => 'SOFTWARE',
-            'objek-aplikasi' => 'OBJEK',
-            'format-file' => 'EKSTENSI',
-            'save-vs-save-as' => 'SIMPAN',
-            'mengelola-dokumen' => 'DOKUMEN',
-            'membuat-laporan' => 'LAPORAN',
-            'merangkum-konten' => 'RANGKUM',
-            'laboratorium-maya' => 'VIRTUAL',
-            'lab-maya-vs-fisik' => 'SIMULASI',
-            'keamanan-digital' => 'AMAN',
+            'komponen-sistem-komputer' => 'KOMPONEN',
+            'perangkat-io' => 'INPUT',
+            'cpu-pemrosesan' => 'PROSESOR',
+            'penyimpanan-cloud' => 'CLOUD',
+            'sistem-operasi' => 'OS',
+            'aplikasi-pemrograman' => 'KODE',
+            'heksadesimal' => 'HEXA',
         ];
     }
 
     /**
-     * Daftar lengkap 10 misi.
+     * Daftar 7 ronde.
      *
-     * Tiap ronde: 3 soal materi (jawaban singkat) + 1 soal pengalaman pribadi.
+     * Setiap ronde: game_type + game_questions (soal cepat untuk mekanik game)
+     * + questions (soal uraian untuk pendalaman, dinilai AI).
      *
      * @return array<int, array<string, mixed>>
      */
@@ -171,436 +159,277 @@ class Bab3MateriSeeder extends Seeder
     {
         return [
 
-            // ============================ RONDE 1 ============================
+            // ============================ RONDE 1 · SNAKE ============================
             [
                 'order' => 1,
-                'slug' => 'perangkat-lunak-fitur',
-                'title' => 'Ronde 1 — Perangkat Lunak & Fitur Aplikasi',
+                'slug' => 'komponen-sistem-komputer',
+                'game_type' => 'snake',
+                'title' => 'Ronde 1 — Ular Komponen Sistem Komputer',
                 'difficulty' => 'Mudah',
                 'xp' => 100,
-                'story' => 'Kalian baru bergabung dengan tim intelijen digital. Sebelum masuk ke dokumen rahasia, '
-                    .'kalian harus memahami dulu dengan alat apa dokumen itu dibuat.',
-                'objective' => 'Memahami pengertian perangkat lunak aplikasi serta membedakan jenis aplikasi '
-                    .'perkantoran (pengolah kata, angka, dan presentasi).',
+                'story' => 'Ular pintar sedang kelaparan pengetahuan! Setiap jawaban benar membuatnya '
+                    .'bertambah panjang. Jawaban salah membuat nyawanya berkurang.',
+                'objective' => 'Memahami tiga komponen sistem komputer: perangkat keras (hardware), '
+                    .'perangkat lunak (software), dan pengguna (brainware).',
                 'instructions' => [
-                    'Buka aplikasi pengolah kata di komputer kalian (mis. Microsoft Word atau LibreOffice Writer).',
-                    'Amati menu yang tersedia: File, Home, Insert, Layout, Review, View.',
-                    'Buka juga aplikasi pengolah angka dan pengolah presentasi, lalu bandingkan menunya.',
-                    'Catat nama aplikasi yang kalian pakai, karena ditanyakan di soal 4.',
+                    'Tekan "Mulai Bermain" di halaman game.',
+                    'Baca soal tentang komponen komputer, lalu pilih jawaban yang benar.',
+                    'Jawaban benar membuat ular bertambah panjang dan skor bertambah.',
+                    'Jawaban salah membuat nyawa berkurang satu.',
                     'Kode rahasia ronde ini ada di layar guru.',
                 ],
                 'code_prompt' => 'Masukkan kode rahasia Ronde 1.',
-                'hint_1' => 'Perangkat lunak aplikasi = program siap pakai untuk tugas tertentu.',
-                'hint_2' => 'Pengolah kata untuk teks, pengolah angka untuk tabel, pengolah presentasi untuk slide.',
+                'hint_1' => 'Hardware bisa disentuh, software berupa program, brainware adalah manusia penggunanya.',
+                'hint_2' => 'Contoh hardware: monitor, keyboard. Contoh software: Windows, Word.',
                 'reflection_question' => null,
+                'game_questions' => [
+                    [
+                        'pertanyaan' => 'Komponen komputer yang bisa disentuh disebut...',
+                        'pilihan' => ['Hardware', 'Software', 'Brainware'],
+                        'jawaban' => 0,
+                    ],
+                ],
                 'questions' => [
                     [
-                        'pertanyaan' => 'Apa itu perangkat lunak aplikasi? Jawab satu kalimat.',
-                        'petunjuk' => 'Cukup sebutkan: program siap pakai untuk membantu pengguna menyelesaikan tugas.',
-                    ],
-                    [
-                        'pertanyaan' => 'Sebutkan tiga jenis aplikasi perkantoran dan satu contoh masing-masing.',
-                        'petunjuk' => 'Cukup daftar singkat, tidak perlu penjelasan panjang.',
-                    ],
-                    [
-                        'pertanyaan' => 'Mengapa aplikasi disebut "end-user"? Jawab satu kalimat.',
-                        'petunjuk' => 'Kata kuncinya: dipakai langsung oleh pengguna akhir, bukan pembuatnya.',
-                    ],
-                    [
-                        'pertanyaan' => 'Tulis nama aplikasi pengolah kata yang kalian pakai tadi, dan satu menu yang paling sering kalian buka. Mengapa menu itu?',
-                        'petunjuk' => 'Jawab berdasarkan yang kalian lihat di komputermu sendiri, bukan dari internet.',
+                        'jenis' => 'pendapat',
+                        'pertanyaan' => 'Dari tiga komponen (hardware, software, brainware), mana yang menurutmu paling penting? Beri satu alasan.',
+                        'petunjuk' => 'Tidak ada jawaban salah — jelaskan pendapatmu sendiri.',
                     ],
                 ],
                 'requires_pdf' => false,
                 'is_active' => true,
             ],
 
-            // ============================ RONDE 2 ============================
+            // ============================ RONDE 2 · BREAKOUT ============================
             [
                 'order' => 2,
-                'slug' => 'objek-aplikasi',
-                'title' => 'Ronde 2 — Objek pada Aplikasi Pengolah Kata',
-                'difficulty' => 'Sedang',
-                'xp' => 100,
-                'story' => 'Dokumen rahasia tersusun dari banyak objek. Tim yang memahami objeknya bisa membongkar '
-                    .'dan menyusun ulang dokumen tanpa merusak satu pun bagian.',
-                'objective' => 'Mengenal objek pada aplikasi pengolah kata: file, halaman, paragraf, baris, '
-                    .'karakter, tabel, dan gambar.',
+                'slug' => 'perangkat-io',
+                'game_type' => 'breakout',
+                'title' => 'Ronde 2 — Pecahkan Bata Input & Output',
+                'difficulty' => 'Mudah',
+                'xp' => 110,
+                'story' => 'Dinding bata menyimpan rahasia perangkat komputer. Jawab soal dengan benar '
+                    .'untuk memecahkan batanya satu per satu!',
+                'objective' => 'Membedakan perangkat masukan (input), keluaran (output), dan penyimpanan (storage).',
                 'instructions' => [
-                    'Buka dokumen latihan yang disediakan guru.',
-                    'Klik pada beberapa bagian dokumen: judul, paragraf, tabel, gambar.',
-                    'Klik kanan pada sebuah objek, lalu perhatikan menu yang muncul.',
-                    'Buka menu Layout dan perhatikan pengaturan halamannya.',
+                    'Gerakkan mouse di atas papan untuk memantulkan bola.',
+                    'Jawab soal dengan benar agar bola memecahkan bata.',
+                    'Jawaban salah membuat bola hilang satu.',
                     'Kode rahasia ronde ini ada di layar guru.',
                 ],
                 'code_prompt' => 'Masukkan kode rahasia Ronde 2.',
-                'hint_1' => 'Urutan objek dari besar ke kecil: file → halaman → paragraf → baris → karakter.',
-                'hint_2' => 'Tabel punya objek sendiri: tabel, baris tabel, kolom tabel, dan sel.',
+                'hint_1' => 'Masukan = alat yang mengirim data KE komputer. Keluaran = alat yang menampilkan HASIL.',
+                'hint_2' => 'Keyboard dan mouse adalah masukan. Monitor dan speaker adalah keluaran.',
                 'reflection_question' => null,
+                'game_questions' => [
+                    [
+                        'pertanyaan' => 'Keyboard termasuk perangkat...',
+                        'pilihan' => ['Masukan (input)', 'Keluaran (output)', 'Penyimpanan'],
+                        'jawaban' => 0,
+                    ],
+                ],
                 'questions' => [
                     [
-                        'pertanyaan' => 'Urutkan dari yang paling besar: Karakter, File, Paragraf, Halaman.',
-                        'petunjuk' => 'Cukup tulis urutannya saja, tidak perlu dijelaskan.',
-                    ],
-                    [
-                        'pertanyaan' => 'Apa bedanya objek paragraf dan objek baris? Jawab singkat.',
-                        'petunjuk' => 'Kata kunci: satu paragraf bisa terdiri dari beberapa baris.',
-                    ],
-                    [
-                        'pertanyaan' => 'Sebutkan tiga hal yang bisa diatur pada objek karakter.',
-                        'petunjuk' => 'Contoh: ukuran huruf, warna, jenis huruf, cetak tebal atau miring.',
-                    ],
-                    [
-                        'pertanyaan' => 'Saat kalian klik kanan pada sebuah objek di dokumen tadi, menu apa yang muncul? Sebutkan satu bagian yang kamu ingat.',
-                        'petunjuk' => 'Jawab dari apa yang benar-benar kamu lihat di layar, bukan menebak.',
+                        'jenis' => 'materi',
+                        'pertanyaan' => 'Sebutkan masing-masing dua contoh perangkat masukan dan keluaran.',
+                        'petunjuk' => 'Cukup daftar singkat, tidak perlu penjelasan panjang.',
                     ],
                 ],
                 'requires_pdf' => false,
                 'is_active' => true,
             ],
 
-            // ============================ RONDE 3 ============================
+            // ============================ RONDE 3 · FLAPPY ============================
             [
                 'order' => 3,
-                'slug' => 'format-file',
-                'title' => 'Ronde 3 — Format File & Ekstensi',
+                'slug' => 'cpu-pemrosesan',
+                'game_type' => 'flappy',
+                'title' => 'Ronde 3 — Terbang Melewati Rintangan Prosesor',
                 'difficulty' => 'Sedang',
-                'xp' => 110,
-                'story' => 'Satu kesalahan menyimpan file bisa membuat dokumen rahasia tidak terbaca di komputer lain. '
-                    .'Tim harus hafal betul format file dan kegunaannya.',
-                'objective' => 'Memahami format file (DOCX, XLSX, PPTX, PDF, TXT) dan memilih format yang tepat.',
+                'xp' => 120,
+                'story' => 'Burung pintar harus terbang melewati pipa-pipa rintangan. Setiap jawaban benar '
+                    .'memberinya tenaga untuk mengepak lebih kuat!',
+                'objective' => 'Memahami tiga bagian prosesor: unit kontrol (Control Unit), unit aritmatika '
+                    .'dan logika (ALU), serta register.',
                 'instructions' => [
-                    'Buat dokumen sederhana di aplikasi pengolah kata.',
-                    'Coba simpan dengan format berbeda melalui File → Save As.',
-                    'Perhatikan ekstensi yang muncul di akhir nama file.',
-                    'Buka kembali file tersebut dan amati apakah tampilannya berubah.',
+                    'Tekan spasi (atau sentuh papan) untuk membuat burung terbang.',
+                    'Jawab soal dengan benar agar burung mendapat tenaga ekstra.',
+                    'Jawaban salah membuat burung jatuh.',
                     'Kode rahasia ronde ini ada di layar guru.',
                 ],
                 'code_prompt' => 'Masukkan kode rahasia Ronde 3.',
-                'hint_1' => 'Ekstensi adalah 3-4 huruf terakhir setelah titik pada nama file.',
-                'hint_2' => 'PDF dibuat agar tampilan tidak berubah di komputer mana pun.',
+                'hint_1' => 'Control Unit mengendalikan, ALU menghitung, Register menyimpan sementara.',
+                'hint_2' => 'Prosesor sering disebut otak komputer.',
                 'reflection_question' => null,
+                'game_questions' => [
+                    [
+                        'pertanyaan' => 'Bagian prosesor yang melakukan perhitungan disebut...',
+                        'pilihan' => ['ALU', 'Control Unit', 'Register'],
+                        'jawaban' => 0,
+                    ],
+                ],
                 'questions' => [
                     [
-                        'pertanyaan' => 'Apa itu ekstensi file? Jawab satu kalimat.',
-                        'petunjuk' => 'Fungsinya: memberi tahu komputer jenis file dan aplikasi pembukanya.',
-                    ],
-                    [
-                        'pertanyaan' => 'Sebutkan empat format file dan kegunaannya. Tulis singkat.',
-                        'petunjuk' => 'Boleh dalam bentuk daftar, mis. DOCX = dokumen teks.',
-                    ],
-                    [
-                        'pertanyaan' => 'Mengapa laporan tugas lebih baik dikirim sebagai PDF daripada DOCX? Sebutkan satu alasan.',
-                        'petunjuk' => 'Pikirkan tampilan yang bisa berubah jika dibuka di komputer lain.',
-                    ],
-                    [
-                        'pertanyaan' => 'Tulis nama file yang tadi kalian simpan beserta ekstensinya. Apakah tampilannya berubah setelah dibuka ulang?',
-                        'petunjuk' => 'Pakai nama file asli yang kalian buat sendiri, bukan contoh.',
+                        'jenis' => 'pendapat',
+                        'pertanyaan' => 'Jika prosesor diibaratkan tubuh manusia, bagian mana yang paling mirip otak? Bagikan pendapatmu.',
+                        'petunjuk' => 'Jawab dengan pemikiranmu sendiri.',
                     ],
                 ],
                 'requires_pdf' => false,
                 'is_active' => true,
             ],
 
-            // ============================ RONDE 4 ============================
+            // ============================ RONDE 4 · SNAKE ============================
             [
                 'order' => 4,
-                'slug' => 'save-vs-save-as',
-                'title' => 'Ronde 4 — Perintah Save vs Save As',
+                'slug' => 'penyimpanan-cloud',
+                'game_type' => 'snake',
+                'title' => 'Ronde 4 — Ular Penyimpanan & Awan',
                 'difficulty' => 'Sedang',
-                'xp' => 110,
-                'story' => 'Banyak agen pemula kehilangan dokumen aslinya karena salah menekan Save. Kalian harus '
-                    .'memahami perbedaan keduanya sebelum menyentuh arsip utama.',
-                'objective' => 'Membedakan fungsi Save dan Save As serta memahami risiko menimpa file asli.',
+                'xp' => 120,
+                'story' => 'Ular data sedang mengumpulkan file di awan. Setiap jawaban benar menambah '
+                    .'panjang tubuhnya — jangan sampai datanya hilang!',
+                'objective' => 'Memahami penyimpanan awan (cloud computing) dan manfaatnya untuk keamanan '
+                    .'serta kerja sama data.',
                 'instructions' => [
-                    'Buat dokumen baru, tulis satu kalimat, simpan dengan nama "latihan-1".',
-                    'Ubah isinya, lalu tekan Ctrl + S (Save). Perhatikan nama file di bagian atas.',
-                    'Ubah lagi, kali ini pakai Save As dengan nama "latihan-2".',
-                    'Amati: sekarang ada berapa file di folder kalian?',
+                    'Gunakan tombol panah atau W A S D untuk menggerakkan ular.',
+                    'Jawab soal tentang penyimpanan dengan benar untuk memanjangkan ular.',
+                    'Jawaban salah mengurangi nyawa.',
                     'Kode rahasia ronde ini ada di layar guru.',
                 ],
                 'code_prompt' => 'Masukkan kode rahasia Ronde 4.',
-                'hint_1' => 'Perhatikan nama file di judul jendela setelah menyimpan.',
-                'hint_2' => 'Save As selalu meminta nama dan lokasi baru.',
+                'hint_1' => 'Awan = menyimpan data di internet, bisa dibuka dari perangkat mana saja.',
+                'hint_2' => 'Contoh layanan awan: Google Drive, OneDrive, Dropbox.',
                 'reflection_question' => null,
+                'game_questions' => [
+                    [
+                        'pertanyaan' => 'Menyimpan data di internet disebut...',
+                        'pilihan' => ['Cloud computing', 'Hard disk', 'Flashdisk'],
+                        'jawaban' => 0,
+                    ],
+                ],
                 'questions' => [
                     [
-                        'pertanyaan' => 'Apa perbedaan Save dan Save As? Jawab satu kalimat.',
-                        'petunjuk' => 'Kata kunci: Save menimpa file yang sama, Save As membuat file baru.',
-                    ],
-                    [
-                        'pertanyaan' => 'Apa risiko memakai Save pada dokumen asli milik guru? Jawab singkat.',
-                        'petunjuk' => 'Pikirkan file aslinya yang tertimpa dan tidak bisa dikembalikan.',
-                    ],
-                    [
-                        'pertanyaan' => 'Tulis langkah menyimpan dokumen guru tanpa merusak file aslinya.',
-                        'petunjuk' => 'Cukup sebutkan perintah yang benar saat menyimpan.',
-                    ],
-                    [
-                        'pertanyaan' => 'Tadi kamu membuat "latihan-1" dan "latihan-2". Setelah semua langkah, ada berapa file di folder kalian dan apa saja namanya?',
-                        'petunjuk' => 'Jawab sesuai yang benar-benar kamu lihat di folder komputermu.',
+                        'jenis' => 'saran',
+                        'pertanyaan' => 'Hard disk temanmu rusak dan tugasnya hilang. Apa saranmu agar tidak terulang?',
+                        'petunjuk' => 'Beri satu saran singkat.',
                     ],
                 ],
                 'requires_pdf' => false,
                 'is_active' => true,
             ],
 
-            // ============================ RONDE 5 ============================
+            // ============================ RONDE 5 · BREAKOUT ============================
             [
                 'order' => 5,
-                'slug' => 'mengelola-dokumen',
-                'title' => 'Ronde 5 — Mengelola Dokumen: New, Open, Close, Print',
-                'difficulty' => 'Mudah',
-                'xp' => 100,
-                'story' => 'Markas besar meminta setiap agen bisa mengelola arsip dengan rapi: membuka yang benar, '
-                    .'menutup yang sudah selesai, dan mencetak tepat waktu.',
-                'objective' => 'Memahami perintah dasar pengelolaan dokumen: New, Open, Close, Print, serta '
-                    .'membedakan Close dan Exit.',
+                'slug' => 'sistem-operasi',
+                'game_type' => 'breakout',
+                'title' => 'Ronde 5 — Pecahkan Bata Sistem Operasi',
+                'difficulty' => 'Sedang',
+                'xp' => 130,
+                'story' => 'Tanpa sistem operasi, komputer hanyalah kumpulan besi. Pecahkan bata berisi '
+                    .'soal tentang sang manajer komputer!',
+                'objective' => 'Memahami fungsi sistem operasi dan contohnya pada komputer serta ponsel.',
                 'instructions' => [
-                    'Buka menu File pada aplikasi pengolah kata.',
-                    'Perhatikan perintah New, Open, Save, Save As, Close, dan Print.',
-                    'Buka dua dokumen berbeda sekaligus, lalu tutup salah satu dengan Close.',
-                    'Tutup semuanya, lalu bandingkan dengan menekan tombol X di pojok jendela.',
+                    'Gerakkan mouse di atas papan untuk memantulkan bola.',
+                    'Jawab soal tentang sistem operasi dengan benar.',
                     'Kode rahasia ronde ini ada di layar guru.',
                 ],
                 'code_prompt' => 'Masukkan kode rahasia Ronde 5.',
-                'hint_1' => 'Close menutup dokumen, Exit menutup seluruh aplikasi.',
-                'hint_2' => 'New membuat dokumen kosong, Open membuka dokumen yang sudah ada.',
+                'hint_1' => 'Sistem operasi mengontrol dan mengatur sumber daya komputer.',
+                'hint_2' => 'Windows, Linux, MacOS untuk komputer. Android, iOS untuk ponsel.',
                 'reflection_question' => null,
+                'game_questions' => [
+                    [
+                        'pertanyaan' => 'Program yang mengatur seluruh kerja komputer disebut...',
+                        'pilihan' => ['Sistem operasi', 'Keyboard', 'Monitor'],
+                        'jawaban' => 0,
+                    ],
+                ],
                 'questions' => [
                     [
-                        'pertanyaan' => 'Apa bedanya perintah New dan Open? Jawab singkat.',
-                        'petunjuk' => 'Bandingkan: mulai dari nol vs melanjutkan pekerjaan lama.',
-                    ],
-                    [
-                        'pertanyaan' => 'Apa bedanya Close dan Exit? Jawab satu kalimat.',
-                        'petunjuk' => 'Perhatikan jumlah dokumen yang tertutup.',
-                    ],
-                    [
-                        'pertanyaan' => 'Apa yang terjadi jika dokumen ditutup tanpa disimpan?',
-                        'petunjuk' => 'Ceritakan tentang dialog peringatan yang muncul.',
-                    ],
-                    [
-                        'pertanyaan' => 'Saat kalian menutup aplikasi tadi, apakah muncul peringatan menyimpan? Tulis kalimat peringatannya jika kamu ingat.',
-                        'petunjuk' => 'Jawab dari pengalamanmu sendiri di komputer.',
+                        'jenis' => 'saran',
+                        'pertanyaan' => 'Kalau kamu diminta menyarankan sistem operasi untuk lab sekolah baru, apa pilihanmu dan mengapa?',
+                        'petunjuk' => 'Tidak ada jawaban salah — beri usulan beserta alasan.',
                     ],
                 ],
                 'requires_pdf' => false,
                 'is_active' => true,
             ],
 
-            // ============================ RONDE 6 ============================
+            // ============================ RONDE 6 · FLAPPY ============================
             [
                 'order' => 6,
-                'slug' => 'membuat-laporan',
-                'title' => 'Ronde 6 — Membuat Laporan yang Rapi',
-                'difficulty' => 'Sulit',
+                'slug' => 'aplikasi-pemrograman',
+                'game_type' => 'flappy',
+                'title' => 'Ronde 6 — Terbang di Dunia Pemrograman',
+                'difficulty' => 'Sedang',
                 'xp' => 130,
-                'story' => 'Semua data sudah terkumpul. Sekarang tim harus menyusunnya menjadi satu laporan resmi '
-                    .'yang layak dibaca pimpinan.',
-                'objective' => 'Menggabungkan teks, tabel, gambar, header, footer, dan nomor halaman menjadi '
-                    .'laporan yang rapi.',
+                'story' => 'Burung programmer harus terbang melewati rintangan kode. Jawaban benar '
+                    .'memberinya tenaga untuk terus melaju!',
+                'objective' => 'Membedakan perangkat lunak aplikasi dan perangkat lunak pemrograman '
+                    .'beserta contohnya.',
                 'instructions' => [
-                    'Buat dokumen baru, tulis judul laporan dan nama kelompok kalian.',
-                    'Tambahkan satu paragraf penjelasan singkat.',
-                    'Sisipkan tabel sederhana lewat Insert → Table.',
-                    'Tambahkan Header berisi nama kelompok dan Footer berisi nama sekolah.',
-                    'Tambahkan nomor halaman di bagian bawah dokumen.',
+                    'Tekan spasi atau sentuh papan untuk terbang.',
+                    'Jawab soal tentang aplikasi dan pemrograman dengan benar.',
                     'Kode rahasia ronde ini ada di layar guru.',
                 ],
                 'code_prompt' => 'Masukkan kode rahasia Ronde 6.',
-                'hint_1' => 'Header dan Footer ada di menu Insert.',
-                'hint_2' => 'Nomor halaman biasanya ada di Insert → Page Number.',
+                'hint_1' => 'Aplikasi untuk pengguna biasa, bahasa pemrograman untuk pembuat program.',
+                'hint_2' => 'Scratch dan Python adalah bahasa pemrograman.',
                 'reflection_question' => null,
+                'game_questions' => [
+                    [
+                        'pertanyaan' => 'Python dan Scratch termasuk...',
+                        'pilihan' => ['Bahasa pemrograman', 'Aplikasi perkantoran', 'Perangkat keras'],
+                        'jawaban' => 0,
+                    ],
+                ],
                 'questions' => [
                     [
-                        'pertanyaan' => 'Apa manfaat Header dan nomor halaman pada sebuah laporan? Sebutkan satu.',
-                        'petunjuk' => 'Semua halaman jadi terurut dan jelas milik siapa.',
-                    ],
-                    [
-                        'pertanyaan' => 'Sebutkan tiga hal yang perlu diatur agar tabel di laporan tetap rapi.',
-                        'petunjuk' => 'Contoh: lebar kolom, garis tabel, posisi tabel.',
-                    ],
-                    [
-                        'pertanyaan' => 'Apa itu technical writing? Jawab satu kalimat.',
-                        'petunjuk' => 'Kata kunci: menulis informasi teknis secara jelas dan runtut.',
-                    ],
-                    [
-                        'pertanyaan' => 'Tulis judul laporan yang kalian buat tadi, dan bagian mana yang paling sulit dikerjakan. Mengapa?',
-                        'petunjuk' => 'Sebut judul asli buatan kelompokmu, bukan contoh.',
+                        'jenis' => 'pendapat',
+                        'pertanyaan' => 'Aplikasi apa yang paling sering kamu pakai di ponsel? Menurutmu, programmer membuatnya untuk menyelesaikan masalah apa?',
+                        'petunjuk' => 'Jawab sesuai pengalamanmu sendiri.',
                     ],
                 ],
                 'requires_pdf' => false,
                 'is_active' => true,
             ],
 
-            // ============================ RONDE 7 ============================
+            // ============================ RONDE 7 · SNAKE ============================
             [
                 'order' => 7,
-                'slug' => 'merangkum-konten',
-                'title' => 'Ronde 7 — Merangkum Narasi dari Konten Digital',
-                'difficulty' => 'Sedang',
-                'xp' => 120,
-                'story' => 'Sebuah bacaan digital panjang masuk ke meja tim. Tidak ada waktu membacanya seluruhnya, '
-                    .'jadi kalian harus mahir merangkum.',
-                'objective' => 'Merangkum narasi dari konten digital dan membaca data statistik sederhana.',
+                'slug' => 'heksadesimal',
+                'game_type' => 'snake',
+                'title' => 'Ronde 7 — Ular Misteri Heksadesimal',
+                'difficulty' => 'Sulit',
+                'xp' => 150,
+                'story' => 'Komputer menyimpan alamat memori dalam kode berisi angka dan huruf. '
+                    .'Ular pintar harus memakan jawaban benar untuk membongkar misteri ini!',
+                'objective' => 'Memahami sistem bilangan heksadesimal: 16 simbol dan nilai huruf A-F, '
+                    .'serta penggunaannya pada alamat memori.',
                 'instructions' => [
-                    'Baca satu bacaan digital yang disediakan guru.',
-                    'Tandai gagasan utama setiap paragraf.',
-                    'Catat angka penting bila ada (data statistik).',
-                    'Susun ringkasan maksimal tiga kalimat.',
+                    'Gunakan tombol panah atau W A S D untuk menggerakkan ular.',
+                    'Ingat: A=10, B=11, C=12, D=13, E=14, F=15.',
+                    'Jawab soal heksadesimal dengan benar untuk memanjangkan ular.',
                     'Kode rahasia ronde ini ada di layar guru.',
                 ],
                 'code_prompt' => 'Masukkan kode rahasia Ronde 7.',
-                'hint_1' => 'Gagasan utama biasanya ada di kalimat pertama atau terakhir paragraf.',
-                'hint_2' => 'Ringkasan yang baik memakai kalimat sendiri, bukan menyalin utuh.',
+                'hint_1' => 'Heksadesimal berarti berbasis 16, bukan 10 seperti angka biasa.',
+                'hint_2' => 'Setelah angka 9, huruf A bernilai 10, sampai F bernilai 15.',
                 'reflection_question' => null,
+                'game_questions' => [
+                    [
+                        'pertanyaan' => 'Dalam heksadesimal, huruf F bernilai...',
+                        'pilihan' => ['15', '16', '5'],
+                        'jawaban' => 0,
+                    ],
+                ],
                 'questions' => [
                     [
-                        'pertanyaan' => 'Bagaimana caramu menemukan gagasan utama sebuah paragraf? Jawab singkat.',
-                        'petunjuk' => 'Cukup sebutkan langkahnya, mis. melihat kalimat pertama.',
-                    ],
-                    [
-                        'pertanyaan' => 'Apa bedanya merangkum dan menyalin? Jawab satu kalimat.',
-                        'petunjuk' => 'Kata kunci: memakai kalimat sendiri.',
-                    ],
-                    [
-                        'pertanyaan' => 'Mengapa sumber bacaan digital perlu diperiksa kebenarannya? Sebutkan satu alasan.',
-                        'petunjuk' => 'Pikirkan tentang berita bohong di internet.',
-                    ],
-                    [
-                        'pertanyaan' => 'Tulis satu kalimat ringkasan dari bacaan yang tadi kalian baca, dengan kalimatmu sendiri.',
-                        'petunjuk' => 'Satu kalimat saja, jangan menyalin utuh dari bacaan.',
-                    ],
-                ],
-                'requires_pdf' => false,
-                'is_active' => true,
-            ],
-
-            // ============================ RONDE 8 ============================
-            [
-                'order' => 8,
-                'slug' => 'laboratorium-maya',
-                'title' => 'Ronde 8 — Mengenal Laboratorium Maya',
-                'difficulty' => 'Sedang',
-                'xp' => 120,
-                'story' => 'Laboratorium digital telah dibuka. Tanpa peralatan fisik, tim kalian harus bisa '
-                    .'melakukan percobaan dan membaca hasilnya.',
-                'objective' => 'Memahami pengertian laboratorium maya (virtual lab) dan contoh pemanfaatannya.',
-                'instructions' => [
-                    'Buka simulasi daring yang disediakan guru (mis. PhET).',
-                    'Jalankan satu percobaan sederhana.',
-                    'Ubah satu nilai input dan amati perubahannya.',
-                    'Catat nama simulasi yang kalian buka, karena ditanyakan di soal 4.',
-                    'Kode rahasia ronde ini ada di layar guru.',
-                ],
-                'code_prompt' => 'Masukkan kode rahasia Ronde 8.',
-                'hint_1' => 'Laboratorium maya = simulasi percobaan lewat komputer atau internet.',
-                'hint_2' => 'Contohnya simulasi PhET untuk listrik, gaya, atau gelombang.',
-                'reflection_question' => null,
-                'questions' => [
-                    [
-                        'pertanyaan' => 'Apa itu laboratorium maya? Jawab satu kalimat.',
-                        'petunjuk' => 'Kata kunci: percobaan dijalankan lewat komputer, bukan alat fisik.',
-                    ],
-                    [
-                        'pertanyaan' => 'Sebutkan dua keunggulan laboratorium maya dibanding laboratorium fisik.',
-                        'petunjuk' => 'Pikirkan soal biaya, keamanan, dan kemudahan mengulang percobaan.',
-                    ],
-                    [
-                        'pertanyaan' => 'Apa satu keterbatasan laboratorium maya? Jawab singkat.',
-                        'petunjuk' => 'Pikirkan hal yang tidak bisa disimulasikan komputer.',
-                    ],
-                    [
-                        'pertanyaan' => 'Tulis nama simulasi yang tadi kalian buka dan satu nilai yang kalian ubah. Apa yang berubah setelah diubah?',
-                        'petunjuk' => 'Jawab dari percobaanmu sendiri, bukan dari bacaan.',
-                    ],
-                ],
-                'requires_pdf' => false,
-                'is_active' => true,
-            ],
-
-            // ============================ RONDE 9 ============================
-            [
-                'order' => 9,
-                'slug' => 'lab-maya-vs-fisik',
-                'title' => 'Ronde 9 — Input, Process, Output pada Simulasi',
-                'difficulty' => 'Sulit',
-                'xp' => 130,
-                'story' => 'Pimpinan markas ingin laporan yang tajam. Kalian harus bisa membongkar cara kerja '
-                    .'simulasi dari sisi input, process, dan output.',
-                'objective' => 'Memahami konsep input-process-output pada sebuah simulasi dan membandingkan '
-                    .'laboratorium maya dengan laboratorium fisik.',
-                'instructions' => [
-                    'Buka kembali simulasi laboratorium maya yang kamu pakai sebelumnya.',
-                    'Identifikasi INPUT: apa saja yang kamu atur?',
-                    'Identifikasi PROCESS: apa yang dihitung sistem?',
-                    'Identifikasi OUTPUT: apa hasil yang muncul di layar?',
-                    'Kode rahasia ronde ini ada di layar guru.',
-                ],
-                'code_prompt' => 'Masukkan kode rahasia Ronde 9.',
-                'hint_1' => 'Urutannya: sesuatu masuk (input) → diproses (process) → menghasilkan (output).',
-                'hint_2' => 'Pada simulasi listrik: tegangan dan hambatan adalah input, arus adalah output.',
-                'reflection_question' => null,
-                'questions' => [
-                    [
-                        'pertanyaan' => 'Sebutkan satu perbedaan laboratorium maya dan laboratorium fisik. Cukup satu.',
-                        'petunjuk' => 'Boleh dari segi biaya, keamanan, atau akses.',
-                    ],
-                    [
-                        'pertanyaan' => 'Dari simulasi tadi, apa saja yang termasuk INPUT?',
-                        'petunjuk' => 'Ingat nilai apa yang kamu ubah sebelum percobaan berjalan.',
-                    ],
-                    [
-                        'pertanyaan' => 'Apa OUTPUT yang muncul pada simulasi itu?',
-                        'petunjuk' => 'Sesuatu yang tampil di layar setelah input diubah.',
-                    ],
-                    [
-                        'pertanyaan' => 'Ketika kalian mengubah salah satu nilai input, apa yang terjadi pada output-nya? Jawab satu kalimat.',
-                        'petunjuk' => 'Ceritakan perubahan yang benar-benar kamu amati di layar.',
-                    ],
-                ],
-                'requires_pdf' => false,
-                'is_active' => true,
-            ],
-
-            // ============================ RONDE 10 ===========================
-            [
-                'order' => 10,
-                'slug' => 'keamanan-digital',
-                'title' => 'Ronde 10 — Keamanan Dunia Maya & Refleksi Akhir',
-                'difficulty' => 'Sulit',
-                'xp' => 150,
-                'story' => 'Misi terakhir. Seluruh keterampilan yang kalian pelajari harus dipakai untuk menjaga '
-                    .'dunia digital tetap aman. Ini ujian pamungkas tim.',
-                'objective' => 'Memahami keamanan dunia maya dan menyimpulkan seluruh materi Bab 3.',
-                'instructions' => [
-                    'Diskusikan dengan kelompokmu: bahaya apa saja yang ada di dunia maya?',
-                    'Baca materi keamanan dunia maya yang disediakan guru.',
-                    'Bayangkan kalian ingin membuat simulasi sederhana sendiri.',
-                    'Tentukan input, process, dan output-nya.',
-                    'Kode rahasia terakhir ada di layar guru.',
-                ],
-                'code_prompt' => 'Masukkan kode rahasia penutup Ronde 10.',
-                'hint_1' => 'Keamanan dunia maya mencakup data pribadi, kata sandi, dan penipuan daring.',
-                'hint_2' => 'Untuk merancang simulasi: apa yang diatur, apa yang dihitung, apa hasilnya.',
-                'reflection_question' => null,
-                'questions' => [
-                    [
-                        'pertanyaan' => 'Sebutkan dua bahaya di dunia maya dan cara mencegahnya. Tulis singkat.',
-                        'petunjuk' => 'Contoh: pencurian data, penipuan daring, perundungan siber.',
-                    ],
-                    [
-                        'pertanyaan' => 'Mengapa data pribadi tidak boleh dibagikan sembarangan? Jawab satu kalimat.',
-                        'petunjuk' => 'Pikirkan siapa yang bisa menyalahgunakan data itu.',
-                    ],
-                    [
-                        'pertanyaan' => 'Jika membuat simulasi sederhana, apa input dan output-nya? Tulis singkat.',
-                        'petunjuk' => 'Pilih topik sederhana, mis. simulasi menghitung nilai rata-rata.',
-                    ],
-                    [
-                        'pertanyaan' => 'Dari 10 ronde ini, bagian mana yang paling berguna bagimu? Jelaskan satu alasan singkat.',
-                        'petunjuk' => 'Jawab dengan pengalamanmu sendiri selama mengerjakan ronde-ronde ini.',
+                        'jenis' => 'saran',
+                        'pertanyaan' => 'Kalau kamu harus menjelaskan bilangan heksadesimal kepada teman dengan satu kalimat sederhana, apa kalimatmu?',
+                        'petunjuk' => 'Tulis dengan bahasamu sendiri, seolah menjelaskan ke teman.',
                     ],
                 ],
                 'requires_pdf' => false,

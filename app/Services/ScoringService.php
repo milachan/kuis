@@ -87,6 +87,24 @@ class ScoringService
         $weight = max(0, min(100, (int) config('ai.xp_weight_percent')));
         $earned = (int) round($maxAward * ($weight / 100) * ($score / 100));
 
+        // BONUS USAHA: bila siswa jelas menjawab dengan bahasanya sendiri,
+        // beri bonus XP walaupun isi jawabannya kurang tepat. Tujuannya
+        // menghargai keberanian berpikir dan menulis sendiri.
+        $bonus = 0;
+        if ($submission->own_words === true) {
+            $bonus = (int) config('tikmission.own_words_bonus_xp');
+        }
+
+        $earned += $bonus;
+
+        // Bonus usaha tidak boleh melebihi XP maksimum misi ini.
+        $earned = min($earned, $maxAward);
+
+        // Catat berapa bonus yang benar-benar diberikan (untuk tampilan guru).
+        if ((int) $submission->own_words_bonus !== $bonus) {
+            $submission->forceFill(['own_words_bonus' => $bonus])->save();
+        }
+
         // Hanya boleh naik, tidak pernah menurunkan XP yang sudah ada.
         if ($earned > $progress->xp) {
             $progress->update(['xp' => $earned]);

@@ -56,10 +56,15 @@ Route::prefix('student')->name('student.')->group(function () {
     // Area yang membutuhkan identitas kelompok.
     Route::middleware('student')->group(function () {
         Route::get('/dashboard', [StudentMissionController::class, 'dashboard'])->name('dashboard');
+        // Halaman menunggu ronde berikutnya dibuka guru.
+        Route::get('/waiting', [StudentMissionController::class, 'waiting'])->name('waiting');
         // Status ronde aktif: dipakai halaman misi agar otomatis berpindah
         // ke ronde yang baru dibuka guru.
         Route::get('/round-status', [StudentMissionController::class, 'roundStatus'])->name('round.status');
         Route::get('/mission/{mission}', [StudentMissionController::class, 'show'])->name('mission.show');
+        // Game arcade belajar (soal jadi mekanik permainan).
+        Route::get('/mission/{mission}/game', [StudentMissionController::class, 'game'])->name('mission.game');
+        Route::post('/mission/{mission}/game-answer', [StudentMissionController::class, 'gameAnswer'])->name('mission.game.answer');
         Route::post('/mission/{mission}/submit', [StudentMissionController::class, 'submit'])
             ->middleware('throttle:20,1')
             ->name('mission.submit');
@@ -94,6 +99,10 @@ Route::prefix('teacher')->name('teacher.')->middleware(['auth', 'teacher'])->gro
     // Mode permainan: layar proyektor + kendali ronde.
     Route::get('/sessions/{session}/screen', [RoundController::class, 'screen'])->name('sessions.screen');
     Route::get('/sessions/{session}/live', [RoundController::class, 'live'])->name('sessions.live');
+    // Satu aksi utama: buka ronde berikutnya (ronde lama ditutup otomatis).
+    Route::post('/sessions/{session}/round/next', [RoundController::class, 'next'])->name('sessions.round.next');
+    // Buka ronde tertentu (bisa mundur ke ronde sebelumnya).
+    Route::post('/sessions/{session}/round/open', [RoundController::class, 'openRound'])->name('sessions.round.open');
     Route::post('/sessions/{session}/round/start', [RoundController::class, 'start'])->name('sessions.round.start');
     Route::post('/sessions/{session}/round/end', [RoundController::class, 'end'])->name('sessions.round.end');
     Route::post('/sessions/{session}/round/reset', [RoundController::class, 'reset'])->name('sessions.round.reset');

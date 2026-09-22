@@ -8,8 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
-    'order', 'title', 'slug', 'difficulty', 'story', 'objective', 'instructions',
-    'code_prompt', 'hint_1', 'hint_2', 'reflection_question', 'questions', 'xp',
+    'order', 'title', 'slug', 'game_type', 'difficulty', 'story', 'objective', 'instructions',
+    'code_prompt', 'hint_1', 'hint_2', 'reflection_question', 'questions', 'game_questions', 'xp',
     'requires_pdf', 'is_active',
 ])]
 class Mission extends Model
@@ -19,6 +19,7 @@ class Mission extends Model
         return [
             'instructions' => 'array',
             'questions' => 'array',
+            'game_questions' => 'array',
             'requires_pdf' => 'boolean',
             'is_active' => 'boolean',
             'xp' => 'integer',
@@ -94,11 +95,11 @@ class Mission extends Model
     /**
      * Daftar pertanyaan uraian misi ini.
      *
-     * Format tiap butir: ['pertanyaan' => string, 'petunjuk' => ?string]
+     * Format tiap butir: ['pertanyaan' => string, 'petunjuk' => ?string, 'jenis' => ?string]
      * Bila misi belum punya daftar pertanyaan, dipakai `reflection_question`
      * agar misi lama tetap berjalan.
      *
-     * @return array<int, array{pertanyaan: string, petunjuk: ?string}>
+     * @return array<int, array{pertanyaan: string, petunjuk: ?string, jenis: ?string}>
      */
     public function questionList(): array
     {
@@ -109,7 +110,7 @@ class Mission extends Model
         foreach ($questions as $q) {
             // Dukung bentuk singkat: daftar teks biasa.
             if (is_string($q)) {
-                $normalized[] = ['pertanyaan' => $q, 'petunjuk' => null];
+                $normalized[] = ['pertanyaan' => $q, 'petunjuk' => null, 'jenis' => null];
 
                 continue;
             }
@@ -118,6 +119,7 @@ class Mission extends Model
                 $normalized[] = [
                     'pertanyaan' => (string) $q['pertanyaan'],
                     'petunjuk' => isset($q['petunjuk']) ? (string) $q['petunjuk'] : null,
+                    'jenis' => isset($q['jenis']) ? (string) $q['jenis'] : null,
                 ];
             }
         }
@@ -126,6 +128,7 @@ class Mission extends Model
             $normalized[] = [
                 'pertanyaan' => (string) $this->reflection_question,
                 'petunjuk' => null,
+                'jenis' => null,
             ];
         }
 
@@ -138,5 +141,95 @@ class Mission extends Model
     public function questionCount(): int
     {
         return count($this->questionList());
+    }
+
+    // ---------------------------------------------------------------------
+    // Game arcade
+    // ---------------------------------------------------------------------
+
+    /**
+     * Daftar game arcade yang didukung beserta label ramah anak.
+     *
+     * @var array<string, array{label: string, icon: string, how: string}>
+     */
+    public const GAMES = [
+        'snake' => [
+            'label' => 'Ular Pintar',
+            'icon' => '🐍',
+            'how' => 'Jawab benar untuk memanjangkan ular. Salah = ular kehilangan nyawa.',
+        ],
+        'breakout' => [
+            'label' => 'Pecahkan Target',
+            'icon' => '🧱',
+            'how' => 'Jawab benar untuk memecahkan bata. Salah = bola hilang satu.',
+        ],
+        'flappy' => [
+            'label' => 'Terbang Tinggi',
+            'icon' => '🕊️',
+            'how' => 'Jawab benar untuk terbang melewati rintangan. Salah = jatuh.',
+        ],
+    ];
+
+    /**
+     * Apakah misi ini memakai game arcade.
+     */
+    public function hasGame(): bool
+    {
+        return filled($this->game_type) && array_key_exists($this->game_type, self::GAMES);
+    }
+
+    /**
+     * Info game misi ini (label, ikon, cara main).
+     *
+     * @return array{label: string, icon: string, how: string}|null
+     */
+    public function gameInfo(): ?array
+    {
+        return $this->game_type ? (self::GAMES[$this->game_type] ?? null) : null;
+    }
+
+    /**
+     * Bank soal cepat untuk mekanik game.
+     *
+     * Format tiap butir: ['pertanyaan' => string, 'pilihan' => array, 'jawaban' => int]
+     *
+     * @return array<int, array{pertanyaan: string, pilihan: array<int, string>, jawaban: int}>
+     */
+    public function gameQuestionList(): array
+    {
+        $items = is_array($this->game_questions) ? $this->game_questions : [];
+
+        $bersih = [];
+
+        foreach ($items as $q) {
+            $pilihan = is_array($q['pilihan'] ?? null) ? array_values($q['pilihan']) : [];
+
+            if (empty($q['pertanyaan']) || count($pilihan) < 2) {
+                continue;
+            }
+
+            $jawaban = (int) ($q['jawaban'] ?? 0);
+
+            // Jaga agar indeks jawaban selalu valid.
+            if ($jawaban < 0 || $jawaban >= count($pilihan)) {
+                $jawaban = 0;
+            }
+
+            $bersih[] = [
+                'pertanyaan' => (string) $q['pertanyaan'],
+                'pilihan' => array_map('strval', $pilihan),
+                'jawaban' => $jawaban,
+            ];
+        }
+
+        return $bersih;
+    }
+
+    /**
+     * Jumlah soal game misi ini.
+     */
+    public function gameQuestionCount(): int
+    {
+        return count($this->gameQuestionList());
     }
 }

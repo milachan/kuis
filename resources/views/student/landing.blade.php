@@ -1,63 +1,70 @@
-@extends('layouts.guest')
+<!DOCTYPE html>
+<html lang="id" class="scroll-smooth">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 
-@section('title', 'TIK Mission — Operasi File Rahasia')
+    <title>Masuk — TIK Mission</title>
 
-@section('content')
-<div class="w-full max-w-2xl text-center">
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+</head>
+<body class="min-h-screen bg-sky-50 font-sans text-ink-900 antialiased">
 
-    {{-- Badge --}}
-    <span class="badge border border-cyan-accent/30 bg-cyan-accent/10 text-cyan-accent">
-        Informatika Kelas 8 SMP/MTs · Bab 3
-    </span>
+    <div id="tik-toast-container"
+         class="pointer-events-none fixed right-4 top-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"></div>
 
-    {{-- Judul --}}
-    <h1 class="mt-5 text-4xl font-black leading-tight tracking-tight sm:text-5xl">
-        <span class="bg-gradient-to-r from-cyan-accent via-teal-accent to-cyan-accent bg-clip-text text-transparent">
-            TIK MISSION
-        </span>
-        <span class="mt-2 block text-xl font-semibold text-white/90 sm:text-2xl">
-            Operasi File Rahasia
-        </span>
-    </h1>
+    @include('components.flash')
 
-    <p class="mx-auto mt-4 max-w-lg text-sm leading-relaxed text-white/60 sm:text-base">
-        Kuasai materi. Jawab pertanyaannya. Kumpulkan skor. Buka ronde berikutnya.
-    </p>
+    <main class="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-4 py-10">
 
-    {{-- Tombol utama --}}
-    <div class="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-        <a href="{{ route('student.join') }}" class="btn-primary w-full px-8 py-3 text-base sm:w-auto">
-            Mulai Misi
-        </a>
-        <a href="{{ route('login') }}" class="btn-secondary w-full sm:w-auto">
-            Masuk sebagai Guru
-        </a>
-    </div>
-
-    {{-- Tiga pilar misi --}}
-    <div class="mt-10 grid gap-3 text-left sm:grid-cols-3">
-        @foreach ([
-            ['icon' => '📚', 'title' => 'Materi Lengkap', 'desc' => 'Sepuluh ronde ringkas dari Bab 3 TIK.'],
-            ['icon' => '🤖', 'title' => 'Dinilai AI', 'desc' => 'Jawabanmu langsung diberi skor oleh AI.'],
-            ['icon' => '🔓', 'title' => 'Buka Ronde Berikutnya', 'desc' => 'Temukan kode rahasia untuk melanjutkan ronde.'],
-        ] as $item)
-            <div class="panel p-4">
-                <div class="text-2xl">{{ $item['icon'] }}</div>
-                <h3 class="mt-2 text-sm font-semibold text-white">{{ $item['title'] }}</h3>
-                <p class="mt-1 text-xs leading-relaxed text-white/60">{{ $item['desc'] }}</p>
+        {{-- Sambutan --}}
+        <div class="mb-6 text-center">
+            <div class="animate-bob mx-auto grid h-24 w-24 place-items-center rounded-3xl bg-sky-500 text-5xl shadow-md">
+                🎓
             </div>
-        @endforeach
-    </div>
+            <h1 class="mt-4 text-3xl font-black tracking-tight text-ink-900 sm:text-4xl">
+                TIK MISSION
+            </h1>
+            <p class="mt-1 text-sm font-black uppercase tracking-widest text-sky-600">
+                Bab 4 · Sistem Komputer
+            </p>
+            <p class="mx-auto mt-4 max-w-md text-sm font-semibold leading-relaxed text-ink-700">
+                Kuasai materi. Jawab pertanyaannya. Kumpulkan XP. Buka ronde berikutnya!
+            </p>
+        </div>
 
-    {{-- Aturan AI --}}
-    <div class="mt-6 rounded-xl border border-gold/25 bg-gold/5 p-4 text-left">
-        <h3 class="flex items-center gap-2 text-sm font-bold text-gold">🤖 AI DIPERBOLEHKAN</h3>
-        <p class="mt-2 text-xs leading-relaxed text-gold/90">
-            AI boleh kamu gunakan untuk mencari langkah penggunaan aplikasi, memahami istilah,
-            atau meminta penjelasan shortcut. AI <strong>tidak boleh</strong> mengerjakan seluruh
-            tugas atau membuat bukti palsu. Yang dinilai adalah kemampuan kalian melakukan praktik.
+        {{-- Keunggulan singkat --}}
+        <div class="mb-6 grid grid-cols-3 gap-2">
+            @foreach ([
+                ['icon' => '📚', 'title' => '7 Ronde', 'desc' => 'Materi lengkap'],
+                ['icon' => '🤖', 'title' => 'Dinilai AI', 'desc' => 'Skor langsung'],
+                ['icon' => '🏆', 'title' => 'Kumpulkan XP', 'desc' => 'Jadi juara'],
+            ] as $item)
+                <div class="rounded-2xl border-2 border-sky-100 bg-white p-3 text-center shadow-sm">
+                    <p class="text-2xl">{{ $item['icon'] }}</p>
+                    <p class="mt-1 text-xs font-black text-ink-900">{{ $item['title'] }}</p>
+                    <p class="text-[10px] font-semibold text-ink-600">{{ $item['desc'] }}</p>
+                </div>
+            @endforeach
+        </div>
+
+        {{-- Tombol masuk --}}
+        <a href="{{ route('student.join') }}" class="btn-primary w-full py-4 text-base">
+            🚀 Mulai Bermain
+        </a>
+
+        <p class="mt-4 text-center text-xs font-semibold text-ink-600">
+            Minta kode sesi kepada gurumu dulu ya.
         </p>
-    </div>
 
-</div>
-@endsection
+        {{-- Tautan guru --}}
+        <div class="mt-8 text-center">
+            <a href="{{ route('login') }}" class="text-xs font-bold text-ink-500 underline transition hover:text-sky-600">
+                Masuk sebagai guru
+            </a>
+        </div>
+    </main>
+
+</body>
+</html>

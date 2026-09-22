@@ -43,7 +43,14 @@
                             @foreach ($submission->mission->questionList() as $i => $q)
                                 <li class="flex gap-2">
                                     <span class="shrink-0 font-bold text-cyan-accent">{{ $i + 1 }}.</span>
-                                    <span>{{ $q['pertanyaan'] }}</span>
+                                    <span>
+                                        @if (! empty($q['jenis']))
+                                            <span class="mr-1 rounded bg-white/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-white/50">
+                                                {{ $q['jenis'] }}
+                                            </span>
+                                        @endif
+                                        {{ $q['pertanyaan'] }}
+                                    </span>
                                 </li>
                             @endforeach
                         </ol>
@@ -221,6 +228,19 @@
                             Indikator ini hanya membantu Anda memilih kiriman mana yang perlu
                             ditanya lisan. Tulisan rapi bukan berarti hasil salinan.
                         </p>
+                    @endif
+
+                    {{-- Bonus usaha: bahasa sendiri --}}
+                    @if ($submission->own_words === true)
+                        <div class="mt-3 rounded-lg border border-emerald-400/30 bg-emerald-500/10 p-2.5">
+                            <p class="text-[11px] font-bold text-emerald-200">
+                                💪 BONUS USAHA: +{{ (int) $submission->own_words_bonus }} XP
+                            </p>
+                            <p class="mt-1 text-[11px] leading-relaxed text-emerald-100/80">
+                                Siswa menjawab dengan bahasanya sendiri. Bonus ini diberikan
+                                meskipun isi jawabannya kurang tepat, untuk menghargai usaha.
+                            </p>
+                        </div>
                     @endif
                 </div>
             @endif

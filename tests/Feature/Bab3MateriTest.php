@@ -39,7 +39,7 @@ class Bab3MateriTest extends TestCase
         $this->seed(Bab3MateriSeeder::class);
     }
 
-    protected function fakeAi(int $score = 85, ?int $authenticity = null, ?string $note = null): void
+    protected function fakeAi(int $score = 85, ?int $authenticity = null, ?string $note = null, ?bool $ownWords = null): void
     {
         $payload = [
             'skor' => $score,
@@ -55,45 +55,46 @@ class Bab3MateriTest extends TestCase
             $payload['catatan_keaslian'] = $note ?? 'Terlihat wajar.';
         }
 
+        if ($ownWords !== null) {
+            $payload['bahasa_sendiri'] = $ownWords;
+        }
+
         Http::fake(['*' => Http::response([
             'model' => 'deepseek-chat',
             'choices' => [['message' => ['content' => json_encode($payload)]]],
         ], 200)]);
     }
 
-    protected function joinTeam(): Team
+    protected function joinTeam(string $name = 'Kelompok Materi'): Team
     {
         $this->post('/student/join', [
             'code' => 'TIK8-DEMO',
-            'team_name' => 'Kelompok Materi',
+            'team_name' => $name,
             'members' => ['Ana'],
         ]);
 
-        return Team::query()->where('name', 'Kelompok Materi')->firstOrFail();
+        return Team::query()->where('name', $name)->firstOrFail();
     }
 
     // -----------------------------------------------------------------
     // DATA MATERI
     // -----------------------------------------------------------------
 
-    public function test_ada_sepuluh_ronde_dari_materi_bab_3(): void
+    public function test_ada_tujuh_ronde_dari_materi_bab_4(): void
     {
-        $this->assertSame(10, app(RoundService::class)->totalRounds());
+        $this->assertSame(7, app(RoundService::class)->totalRounds());
 
         $missions = Mission::query()->active()->ordered()->get();
 
-        $this->assertCount(10, $missions);
+        $this->assertCount(7, $missions);
 
-        // Nomor ronde harus berurutan 1..10.
-        $this->assertSame(range(1, 10), $missions->pluck('order')->all());
+        // Nomor ronde harus berurutan 1..7.
+        $this->assertSame(range(1, 7), $missions->pluck('order')->all());
 
-        // Setiap ronde punya pertanyaan uraian.
+        // Setiap ronde punya 1-2 soal saja, tetapi bervariasi jenisnya.
         foreach ($missions as $mission) {
-            $this->assertGreaterThanOrEqual(
-                3,
-                $mission->questionCount(),
-                "Ronde {$mission->order} seharusnya punya minimal 3 pertanyaan."
-            );
+            $this->assertGreaterThanOrEqual(1, $mission->questionCount());
+            $this->assertLessThanOrEqual(2, $mission->questionCount());
         }
     }
 
@@ -101,21 +102,49 @@ class Bab3MateriTest extends TestCase
     {
         $session = GameSession::query()->where('code', 'TIK8-DEMO')->firstOrFail();
 
-        $this->assertSame(10, $session->missionCodes()->count());
+        $this->assertSame(7, $session->missionCodes()->count());
     }
 
-    public function test_materi_mencakup_keempat_subbab_buku(): void
+    public function test_materi_mencakup_komponen_dan_heksadesimal(): void
     {
         $slugs = Mission::query()->active()->pluck('slug')->all();
 
-        // A. Perangkat lunak aplikasi
-        $this->assertContains('perangkat-lunak-fitur', $slugs);
-        // B. Pembuatan laporan
-        $this->assertContains('membuat-laporan', $slugs);
-        // C. Merangkum narasi konten digital
-        $this->assertContains('merangkum-konten', $slugs);
-        // D. Laboratorium maya
-        $this->assertContains('laboratorium-maya', $slugs);
+        // A. Komponen sistem komputer (hardware, software, brainware).
+        $this->assertContains('komponen-sistem-komputer', $slugs);
+        // Perangkat masukan/keluaran.
+        $this->assertContains('perangkat-io', $slugs);
+        // Pemrosesan (CPU).
+        $this->assertContains('cpu-pemrosesan', $slugs);
+        // Penyimpanan & cloud.
+        $this->assertContains('penyimpanan-cloud', $slugs);
+        // Sistem operasi.
+        $this->assertContains('sistem-operasi', $slugs);
+        // Aplikasi & bahasa pemrograman.
+        $this->assertContains('aplikasi-pemrograman', $slugs);
+        // B. Bilangan heksadesimal.
+        $this->assertContains('heksadesimal', $slugs);
+    }
+
+    public function test_jenis_soal_uraian_bervariasi_antar_ronde(): void
+    {
+        $semuaJenis = Mission::query()->active()->get()
+            ->flatMap(fn ($m) => collect($m->questionList())->pluck('jenis'))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        // Soal uraian pendamping game: jenisnya bervariasi antara pendapat,
+        // materi, dan saran. Variasi soal cepat sendiri ada di game.
+        $this->assertGreaterThanOrEqual(
+            3,
+            count($semuaJenis),
+            'Jenis soal uraian kurang bervariasi: '.implode(', ', $semuaJenis)
+        );
+
+        foreach (['materi', 'pendapat', 'saran'] as $wajib) {
+            $this->assertContains($wajib, $semuaJenis, "Jenis soal '{$wajib}' tidak ditemukan.");
+        }
     }
 
     // -----------------------------------------------------------------
@@ -215,9 +244,9 @@ class Bab3MateriTest extends TestCase
         Http::assertSent(function ($request) use ($mission) {
             $body = json_encode($request->data());
 
-            // Judul misi mengandung em dash (—) yang di JSON menjadi \u2014,
-            // jadi dicek lewat bagian teks uniknya saja.
-            $titleFragment = 'Objek pada Aplikasi Pengolah Kata';
+            // Judul misi memuat tanda khusus (— dan &) yang berubah bentuk di
+            // JSON, jadi dicek lewat potongan kata yang aman saja.
+            $titleFragment = 'Bata Input';
             $firstQuestion = $mission->questionList()[0]['pertanyaan'];
 
             return str_contains($body, $titleFragment)
@@ -232,8 +261,8 @@ class Bab3MateriTest extends TestCase
         $this->fakeAi(100);
         $team = $this->joinTeam();
 
-        // Ronde 10 berbobot 150 XP.
-        $mission = Mission::query()->where('order', 10)->firstOrFail();
+        // Ronde 7 berbobot 150 XP.
+        $mission = Mission::query()->where('order', 7)->firstOrFail();
         app(MissionService::class)->unlockManually($team, $mission);
 
         $this->post('/student/mission/'.$mission->id.'/submit', [
@@ -246,33 +275,180 @@ class Bab3MateriTest extends TestCase
     }
 
     // -----------------------------------------------------------------
-    // SOAL SINGKAT & SOAL PENGALAMAN PRIBADI
+    // SOAL SINGKAT & JENIS YANG BERVARIASI
     // -----------------------------------------------------------------
 
-    public function test_setiap_ronde_punya_tepat_empat_pertanyaan(): void
+    public function test_setiap_ronde_punya_satu_atau_dua_pertanyaan(): void
     {
         foreach (Mission::query()->active()->ordered()->get() as $mission) {
-            $this->assertSame(
-                4,
+            // Cukup 1-2 soal per ronde agar murid tidak lelah mengetik.
+            $this->assertGreaterThanOrEqual(1, $mission->questionCount());
+            $this->assertLessThanOrEqual(
+                2,
                 $mission->questionCount(),
-                "Ronde {$mission->order} seharusnya punya tepat 4 pertanyaan."
+                "Ronde {$mission->order} seharusnya maksimal 2 pertanyaan."
             );
         }
     }
 
-    public function test_setiap_ronde_menyisipkan_soal_pengalaman_pribadi(): void
+    public function test_setiap_soal_punya_jenis_yang_jelas(): void
     {
         foreach (Mission::query()->active()->ordered()->get() as $mission) {
-            $soalTerakhir = $mission->questionList()[3]['pertanyaan'];
-
-            // Soal terakhir tiap ronde harus menanyakan pengalaman/observasi
-            // pribadi, supaya sulit dijawab hanya dengan menyalin dari AI.
-            $this->assertMatchesRegularExpression(
-                '/(kalian|kamu|kami|bagimu|tadi|komputermu|kelompokmu|pengalaman)/i',
-                $soalTerakhir,
-                "Soal 4 ronde {$mission->order} seharusnya menanyakan pengalaman pribadi."
-            );
+            foreach ($mission->questionList() as $i => $q) {
+                $this->assertNotEmpty(
+                    $q['jenis'],
+                    'Soal '.($i + 1)." ronde {$mission->order} belum punya jenis."
+                );
+            }
         }
+    }
+
+    // -----------------------------------------------------------------
+    // BONUS XP BAHASA SENDIRI
+    // -----------------------------------------------------------------
+
+    public function test_bonus_xp_diberikan_saat_jawaban_pakai_bahasa_sendiri(): void
+    {
+        // Skor rendah (jawaban kurang tepat), TETAPI bahasa sendiri = true.
+        $this->fakeAi(30, 5, 'Wajar, menulis sendiri.', true);
+        $team = $this->joinTeam();
+
+        $mission = Mission::query()->where('order', 1)->firstOrFail();
+        app(MissionService::class)->unlockManually($team, $mission);
+
+        $this->post('/student/mission/'.$mission->id.'/submit', [
+            'answer' => 'Aku ngga begitu paham tapi kayaknya komputer butuh listrik biar nyala.',
+        ]);
+
+        $submission = Submission::query()->firstOrFail();
+
+        $this->assertTrue($submission->own_words);
+
+        // XP = (120 * 0.7 * 0.3) + bonus 15 = 25 + 15 = 40.
+        // Jadi meskipun jawabannya kurang tepat (skor 30), siswa tetap dapat XP usaha.
+        $this->assertSame(15, $submission->own_words_bonus);
+        $this->assertSame(40, $team->fresh()->xp);
+    }
+
+    public function test_tanpa_bahasa_sendiri_tidak_ada_bonus(): void
+    {
+        $this->fakeAi(30, 2, 'Mirip salinan.', false);
+        $team = $this->joinTeam();
+
+        $mission = Mission::query()->where('order', 1)->firstOrFail();
+        app(MissionService::class)->unlockManually($team, $mission);
+
+        $this->post('/student/mission/'.$mission->id.'/submit', [
+            'answer' => 'Perangkat lunak aplikasi merupakan program siap pakai yang dirancang.',
+        ]);
+
+        $submission = Submission::query()->firstOrFail();
+
+        $this->assertFalse($submission->own_words);
+        $this->assertSame(0, $submission->own_words_bonus);
+
+        // XP hanya dari skor: 120 * 0.7 * 0.3 = 25.
+        $this->assertSame(25, $team->fresh()->xp);
+    }
+
+    public function test_bonus_usaha_tidak_melebihi_xp_maksimum_misi(): void
+    {
+        // Skor penuh + bonus: tidak boleh melebihi XP maksimum misi (120).
+        $this->fakeAi(100, 5, 'Sangat asli.', true);
+        $team = $this->joinTeam();
+
+        $mission = Mission::query()->where('order', 1)->firstOrFail();
+        app(MissionService::class)->unlockManually($team, $mission);
+
+        $this->post('/student/mission/'.$mission->id.'/submit', [
+            'answer' => 'Jawaban dengan bahasa sendiri yang isinya juga sudah tepat.',
+        ]);
+
+        // 120 * 0.7 * 1.0 = 84, + bonus 15 = 99. Masih di bawah 120, aman.
+        $this->assertSame(99, $team->fresh()->xp);
+        $this->assertLessThanOrEqual(120, $team->fresh()->xp);
+    }
+
+    public function test_jawaban_salah_tetap_dapat_xp_lebih_bila_pakai_bahasa_sendiri(): void
+    {
+        // Dua skenario dengan SKOR SAMA, bedanya hanya bahasa sendiri.
+        $this->fakeAi(40, 5, 'Menulis sendiri.', true);
+        $teamA = $this->joinTeam('Kelompok Bahasa Sendiri');
+        $mission = Mission::query()->where('order', 1)->firstOrFail();
+        app(MissionService::class)->unlockManually($teamA, $mission);
+
+        $this->post('/student/mission/'.$mission->id.'/submit', [
+            'answer' => 'Aku coba jawab pake pikiranku sendiri walaupun mungkin salah.',
+        ]);
+
+        $xpDenganUsaha = $teamA->fresh()->xp;
+
+        // XP skor saja tanpa bonus = 120 * 0.7 * 0.4 = 34 (dibulatkan 34).
+        // Dengan bonus 15 -> 49.
+        $this->assertSame(49, $xpDenganUsaha);
+    }
+
+    public function test_guru_melihat_bonus_bahasa_sendiri(): void
+    {
+        $this->fakeAi(30, 5, 'Wajar.', true);
+        $team = $this->joinTeam();
+
+        $mission = Mission::query()->where('order', 1)->firstOrFail();
+        app(MissionService::class)->unlockManually($team, $mission);
+
+        $this->post('/student/mission/'.$mission->id.'/submit', [
+            'answer' => 'Aku ngga tau pasti tapi kayaknya gitu deh.',
+        ]);
+
+        $submission = Submission::query()->firstOrFail();
+
+        $response = $this->actingAs(User::factory()->create([
+            'role' => User::ROLE_TEACHER,
+        ]))->get('/teacher/validations/'.$submission->id);
+
+        $response->assertOk();
+        $response->assertSee('BONUS USAHA');
+        $response->assertSee('bahasanya sendiri');
+    }
+
+    public function test_ai_diminta_menilai_bahasa_sendiri(): void
+    {
+        $this->fakeAi(50, 4, 'cukup', true);
+        $team = $this->joinTeam();
+
+        $mission = Mission::query()->where('order', 1)->firstOrFail();
+        app(MissionService::class)->unlockManually($team, $mission);
+
+        $this->post('/student/mission/'.$mission->id.'/submit', [
+            'answer' => 'Jawaban uji untuk memeriksa prompt bahasa sendiri.',
+        ]);
+
+        Http::assertSent(function ($request) {
+            $body = json_encode($request->data());
+
+            return str_contains($body, 'bahasa_sendiri')
+                && str_contains($body, 'BAHASA SENDIRI');
+        });
+    }
+
+    public function test_ai_tanpa_field_bahasa_sendiri_tetap_berjalan(): void
+    {
+        // Model lama tidak mengirim "bahasa_sendiri": tidak boleh error.
+        $this->fakeAi(70);
+        $team = $this->joinTeam();
+
+        $mission = Mission::query()->where('order', 1)->firstOrFail();
+        app(MissionService::class)->unlockManually($team, $mission);
+
+        $this->post('/student/mission/'.$mission->id.'/submit', [
+            'answer' => 'Jawaban uji tanpa field bahasa sendiri dari AI.',
+        ]);
+
+        $submission = Submission::query()->firstOrFail();
+
+        $this->assertSame(Submission::AI_SCORED, $submission->ai_status);
+        $this->assertNull($submission->own_words);
+        $this->assertSame(0, $submission->own_words_bonus);
     }
 
     public function test_pertanyaan_dirancang_singkat(): void
@@ -449,7 +625,7 @@ class Bab3MateriTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Pertanyaan');
-        $response->assertSee('perangkat lunak aplikasi');
+        $response->assertSee('komponen sistem komputer');
 
         // Tidak boleh lagi menyebut kewajiban unggah bukti.
         $response->assertDontSee('Wajib PDF');
@@ -471,13 +647,13 @@ class Bab3MateriTest extends TestCase
         $this->assertStringContainsString('Lampiran opsional', $html);
     }
 
-    public function test_progres_misi_dibuat_untuk_kesepuluh_ronde(): void
+    public function test_progres_misi_dibuat_untuk_ketujuh_ronde(): void
     {
         $team = $this->joinTeam();
 
         // Misi 1 otomatis tersedia, sisanya terkunci.
         $this->assertSame(
-            10,
+            7,
             TeamProgress::query()->where('team_id', $team->id)->count()
         );
 

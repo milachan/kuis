@@ -185,7 +185,7 @@ class AiReviewTest extends TestCase
             'evidence' => UploadedFile::fake()->image('bukti.png'),
         ]);
 
-        $response->assertRedirect(route('student.mission.show', $mission));
+        $response->assertRedirect(route('student.waiting'));
         $response->assertSessionHas('success', fn ($msg) => str_contains($msg, '88'));
     }
 
@@ -206,7 +206,8 @@ class AiReviewTest extends TestCase
         ]);
 
         // Kiriman tetap tersimpan & tetap menunggu validasi guru.
-        $response->assertRedirect(route('student.mission.show', $mission));
+        // (Setelah kirim, siswa diarahkan ke halaman menunggu ronde berikutnya.)
+        $response->assertRedirect(route('student.waiting'));
 
         $submission = Submission::query()->firstOrFail();
         $this->assertSame(Submission::STATUS_WAITING, $submission->status);

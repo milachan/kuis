@@ -30,7 +30,13 @@ class MissionService
 
         $firstMissionId = $missions->first()->id;
 
-        DB::transaction(function () use ($team, $missions, $firstMissionId) {
+        // Bila permainan sudah berjalan saat kelompok ini dibuat, misi pertama
+        // ditandai sebagai pendatang baru agar tidak ikut dikunci ketika guru
+        // berpindah ke ronde berikutnya.
+        $session = $team->gameSession;
+        $isLateEntry = $session !== null && (int) $session->current_round > 1;
+
+        DB::transaction(function () use ($team, $missions, $firstMissionId, $isLateEntry) {
             foreach ($missions as $mission) {
                 $isFirst = $mission->id === $firstMissionId;
 
@@ -41,6 +47,7 @@ class MissionService
                             ? TeamProgress::STATUS_AVAILABLE
                             : TeamProgress::STATUS_LOCKED,
                         'unlocked_at' => $isFirst ? now() : null,
+                        'late_entry' => $isFirst && $isLateEntry,
                     ]
                 );
             }
@@ -92,11 +99,26 @@ class MissionService
 
     /**
      * Tandai misi sebagai SEDANG DIKERJAKAN saat siswa membukanya.
+     *
+     * Sekaligus mencatat waktu mulai kerja siswa (hanya sekali). Waktu ini
+     * menjadi titik awal batas waktu per siswa: siswa bebas mengerjakan
+     * selama waktunya belum habis, dihitung sejak dia membuka halaman ronde,
+     * bukan sejak guru membuka ronde.
      */
     public function markInProgress(TeamProgress $progress): void
     {
+        $changes = [];
+
         if ($progress->status === TeamProgress::STATUS_AVAILABLE) {
-            $progress->update(['status' => TeamProgress::STATUS_IN_PROGRESS]);
+            $changes['status'] = TeamProgress::STATUS_IN_PROGRESS;
+        }
+
+        if ($progress->work_started_at === null) {
+            $changes['work_started_at'] = now();
+        }
+
+        if ($changes !== []) {
+            $progress->update($changes);
         }
     }
 
@@ -133,6 +155,10 @@ class MissionService
 
     /**
      * Buka satu misi secara manual oleh guru.
+     *
+     * Bila ronde untuk misi ini sudah berjalan lebih dulu (murid masuk
+     * terlambat), misi ditandai `late_entry` supaya tidak ikut dikunci saat
+     * guru berpindah ke ronde berikutnya.
      */
     public function unlockManually(Team $team, Mission $mission): void
     {
@@ -141,11 +167,29 @@ class MissionService
             ['status' => TeamProgress::STATUS_LOCKED]
         );
 
+        // Tentukan apakah ini pendatang baru: misi dibukakan setelah ronde
+        // misi tersebut sudah lewat dari ronde aktif sesi.
+        $session = $team->gameSession;
+        $isLateEntry = $session !== null
+            && $session->current_round > 0
+            && $mission->order < $session->current_round;
+
         if ($progress->status === TeamProgress::STATUS_LOCKED) {
             $progress->update([
                 'status' => TeamProgress::STATUS_AVAILABLE,
                 'unlocked_at' => now(),
+                // Timer kerja siswa baru mulai saat dia membuka halamannya.
+                'work_started_at' => null,
+                'late_entry' => $isLateEntry,
             ]);
+
+            return;
+        }
+
+        // Misi sudah terbuka sebelumnya: perbarui penanda pendatang baru bila
+        // kelompok ini baru bergabung setelah ronde berjalan.
+        if ($isLateEntry && ! $progress->late_entry) {
+            $progress->update(['late_entry' => true]);
         }
     }
 

@@ -11,6 +11,7 @@ export default defineConfig({
                 'resources/js/app.js',
                 'resources/js/screen.js',
                 'resources/js/round-watch.js',
+                'resources/js/game.js',
             ],
             refresh: true,
             fonts: [

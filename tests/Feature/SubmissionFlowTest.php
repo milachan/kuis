@@ -98,7 +98,8 @@ class SubmissionFlowTest extends TestCase
             'evidence' => $file,
         ]);
 
-        $response->assertRedirect(route('student.mission.show', $mission));
+        // Setelah kirim, siswa diarahkan ke halaman menunggu ronde berikutnya.
+        $response->assertRedirect(route('student.waiting'));
 
         $submission = Submission::query()->firstOrFail();
         $this->assertSame(Submission::STATUS_WAITING, $submission->status);
@@ -194,7 +195,7 @@ class SubmissionFlowTest extends TestCase
             'file' => UploadedFile::fake()->create('laporan.pdf', 500, 'application/pdf'),
         ]);
 
-        $response->assertRedirect(route('student.mission.show', $mission));
+        $response->assertRedirect(route('student.waiting'));
 
         $submission = Submission::query()->firstOrFail();
         $this->assertNotNull($submission->file_path);

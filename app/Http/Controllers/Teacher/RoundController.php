@@ -44,6 +44,88 @@ class RoundController extends Controller
     }
 
     /**
+     * SATU aksi untuk membuka ronde berikutnya.
+     *
+     * Ini cara utama guru memindahkan permainan: ronde yang sedang berjalan
+     * ditutup otomatis, lalu ronde berikutnya dibuka. Guru tidak perlu
+     * menekan "akhiri ronde" lebih dulu, sehingga tidak bingung.
+     */
+    public function next(Request $request, GameSession $session)
+    {
+        $validated = $request->validate([
+            'duration_minutes' => ['nullable', 'integer', 'min:0', 'max:120'],
+        ]);
+
+        if ($session->isEnded()) {
+            return back()->with('error', 'Sesi sudah berakhir. Aktifkan kembali sesi dulu.');
+        }
+
+        $berikutnya = $this->rounds->nextRoundNumber($session);
+
+        if ($berikutnya === null) {
+            return back()->with('error', 'Semua ronde sudah selesai dijalankan.');
+        }
+
+        $mission = $this->rounds->missionForRound($berikutnya);
+
+        if (! $mission) {
+            return back()->with('error', 'Misi untuk ronde '.$berikutnya.' tidak ditemukan.');
+        }
+
+        // Ronde lama ditutup, ronde baru dibuka, timer mulai.
+        $this->rounds->start(
+            $session,
+            $berikutnya,
+            $validated['duration_minutes'] ?? null
+        );
+
+        return back()->with('success', 'Ronde '.$berikutnya.' dibuka: "'.$mission->title.'". '
+            .'Ronde sebelumnya sudah ditutup otomatis.');
+    }
+
+    /**
+     * Buka ronde tertentu yang dipilih guru dari daftar ronde.
+     *
+     * Berguna untuk MUNDUR ke ronde sebelumnya atau melompat ke ronde lain.
+     * XP dan jawaban yang sudah terkumpul tetap aman.
+     */
+    public function openRound(Request $request, GameSession $session)
+    {
+        $validated = $request->validate([
+            'round' => ['required', 'integer', 'min:1', 'max:1000'],
+            'duration_minutes' => ['nullable', 'integer', 'min:0', 'max:120'],
+        ], [
+            'round.required' => 'Nomor ronde tidak dikenali.',
+        ]);
+
+        if ($session->isEnded()) {
+            return back()->with('error', 'Sesi sudah berakhir. Aktifkan kembali sesi dulu.');
+        }
+
+        $round = (int) $validated['round'];
+        $mission = $this->rounds->missionForRound($round);
+
+        if (! $mission) {
+            return back()->with('error', 'Misi untuk ronde '.$round.' tidak ditemukan.');
+        }
+
+        $this->rounds->openRound($session, $round, $validated['duration_minutes'] ?? null);
+
+        return back()->with('success', 'Ronde '.$round.' dibuka: "'.$mission->title.'". '
+            .'Ronde lain ditutup otomatis. XP yang sudah terkumpul tetap aman.');
+    }
+
+    /**
+     * Akhiri ronde yang sedang berjalan (tanpa membuka ronde baru).
+     */
+    public function end(GameSession $session)
+    {
+        $this->rounds->end($session);
+
+        return back()->with('success', 'Ronde diakhiri. Papan skor tetap tampil di layar proyektor.');
+    }
+
+    /**
      * Mulai sebuah ronde dari layar guru.
      */
     public function start(Request $request, GameSession $session)
@@ -70,16 +152,6 @@ class RoundController extends Controller
 
         return back()->with('success', 'Ronde '.$round.' dimulai: "'.$mission->title.'". '
             .'Misi ini sekarang terbuka untuk semua kelompok. Semoga seru!');
-    }
-
-    /**
-     * Akhiri ronde yang sedang berjalan.
-     */
-    public function end(GameSession $session)
-    {
-        $this->rounds->end($session);
-
-        return back()->with('success', 'Ronde diakhiri. Papan skor sementara ditampilkan di layar.');
     }
 
     /**

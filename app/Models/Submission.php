@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Storage;
     'status', 'teacher_comment', 'submitted_at', 'validated_at',
     'ai_status', 'ai_score', 'ai_feedback', 'ai_details', 'ai_model',
     'ai_reviewed_at', 'ai_overridden', 'authenticity_score', 'authenticity_note',
+    'own_words', 'own_words_bonus', 'game_score', 'game_correct', 'game_wrong',
+    'game_played_at', 'game_missed',
 ])]
 class Submission extends Model
 {
@@ -53,6 +55,13 @@ class Submission extends Model
             'ai_score' => 'integer',
             'ai_overridden' => 'boolean',
             'authenticity_score' => 'integer',
+            'own_words' => 'boolean',
+            'own_words_bonus' => 'integer',
+            'game_score' => 'integer',
+            'game_correct' => 'integer',
+            'game_wrong' => 'integer',
+            'game_played_at' => 'datetime',
+            'game_missed' => 'array',
         ];
     }
 

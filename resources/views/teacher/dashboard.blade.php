@@ -2,7 +2,7 @@
 
 @section('title', 'Dashboard')
 @section('page-title', 'Dashboard Guru')
-@section('page-subtitle', 'Ringkasan aktivitas TIK Mission')
+@section('page-subtitle', 'Ringkasan aktivitas TIK Mission · Bab 4 Sistem Komputer')
 
 @section('page-actions')
     <a href="{{ route('teacher.sessions.create') }}" class="btn-primary">+ Buat Sesi Baru</a>
@@ -18,16 +18,16 @@
                      hint="Dari semua sesi" />
         <x-stat-card label="Misi Selesai" :value="$stats['completed_missions']" icon="✅" accent="gold"
                      hint="Total misi tuntas semua kelompok" />
-        <x-stat-card label="Menunggu Validasi" :value="$stats['waiting_validation']" icon="⏳" accent="rose"
-                     hint="Bukti yang perlu diperiksa" />
+        <x-stat-card label="Perlu Diperiksa" :value="$stats['waiting_validation']" icon="⏳" accent="rose"
+                     hint="Jawaban yang menunggu validasi" />
     </div>
 
     <div class="mt-6 grid gap-5 lg:grid-cols-2">
 
-        {{-- Menunggu validasi --}}
+        {{-- Perlu diperiksa --}}
         <div class="panel p-5">
             <div class="mb-4 flex items-center justify-between">
-                <h2 class="text-sm font-bold uppercase tracking-wider text-amber-200">⏳ Perlu Divalidasi</h2>
+                <h2 class="text-sm font-bold uppercase tracking-wider text-amber-200">⏳ Perlu Diperiksa</h2>
                 <a href="{{ route('teacher.validations') }}" class="text-xs font-semibold text-cyan-accent hover:underline">
                     Lihat semua
                 </a>
@@ -46,7 +46,7 @@
                 </a>
             @empty
                 <p class="py-6 text-center text-sm text-white/40">
-                    Tidak ada yang menunggu validasi. Kerja bagus! 🎉
+                    Tidak ada yang perlu diperiksa. Kerja bagus! 🎉
                 </p>
             @endforelse
         </div>
@@ -89,10 +89,10 @@
         <h2 class="mb-3 text-sm font-bold uppercase tracking-wider text-white/70">📌 Alur Cepat</h2>
         <ol class="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             @foreach ([
-                ['1', 'Buat Sesi', 'Atur kode sesi, timer, dan kode rahasia tiap misi.'],
+                ['1', 'Buat Sesi', 'Atur kode sesi, timer, dan kode rahasia tiap ronde.'],
                 ['2', 'Bagikan Kode', 'Siswa masuk memakai kode sesi + nama kelompok.'],
-                ['3', 'Validasi Bukti', 'Periksa screenshot, lalu Lulus atau minta perbaikan.'],
-                ['4', 'Pantau Laporan', 'Lihat progres, XP, dan export hasil ke CSV.'],
+                ['3', 'Jalankan Ronde', 'Buka Layar Proyektor, lalu tekan Mulai Ronde.'],
+                ['4', 'Periksa Jawaban', 'Lihat skor AI & hasil game, lalu Lulus atau minta perbaikan.'],
             ] as $step)
                 <li class="flex gap-3">
                     <span class="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-cyan-strong/15 text-xs font-bold text-cyan-accent">
