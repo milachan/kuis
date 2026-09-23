@@ -86,6 +86,40 @@ class Submission extends Model
     }
 
     // ---------------------------------------------------------------------
+    // Hasil game vs jawaban uraian
+    // ---------------------------------------------------------------------
+
+    /**
+     * Awalan teks otomatis hasil game (dibuat server, bukan tulisan siswa).
+     */
+    public const GAME_SUMMARY_PREFIX = '[Hasil game';
+
+    /**
+     * Apakah kolom jawaban saat ini hanya berisi RINGKASAN HASIL GAME.
+     *
+     * Setelah anak bermain game, server mengisi kolom jawaban dengan ringkasan
+     * permainan supaya guru melihat hasilnya. Teks itu BUKAN jawaban uraian
+     * siswa, jadi tidak boleh dianggap sebagai tulisan mereka.
+     */
+    public function answerIsOnlyGameSummary(): bool
+    {
+        return $this->game_played_at !== null
+            && str_starts_with((string) $this->answer, self::GAME_SUMMARY_PREFIX);
+    }
+
+    /**
+     * Jawaban uraian siswa.
+     *
+     * Mengembalikan null bila kolomnya masih berisi ringkasan hasil game —
+     * kalau tidak, teks otomatis itu ikut muncul di kolom jawaban dan anak
+     * bisa mengirimnya sebagai jawaban uraian.
+     */
+    public function essayAnswer(): ?string
+    {
+        return $this->answerIsOnlyGameSummary() ? null : $this->answer;
+    }
+
+    // ---------------------------------------------------------------------
     // Helper penilaian AI
     // ---------------------------------------------------------------------
 

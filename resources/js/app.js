@@ -266,12 +266,119 @@
     // tidak diperlukan karena kode memang tidak pernah dikirim ke klien.
     // -----------------------------------------------------------------
 
+    // -----------------------------------------------------------------
+    // Ringkasan game yang belum berhasil terkirim
+    // -----------------------------------------------------------------
+    // XP permainan baru diberikan setelah server menerima ringkasan ronde.
+    // Bila jaringan mati, tab ditutup, atau guru menghentikan ronde tepat saat
+    // anak masih bermain, ringkasannya disimpan di browser dan dikirim ulang
+    // begitu halaman siswa dibuka lagi — supaya XP yang sudah dikumpulkan anak
+    // tidak hilang.
+    const PENDING_GAME_KEY = 'tik-game-pending-';
+
+    function csrfToken() {
+        return document.querySelector('meta[name="csrf-token"]')?.content || '';
+    }
+
+    /**
+     * Kirim satu ringkasan permainan. Mengembalikan true bila server menerimanya.
+     */
+    async function kirimRingkasanGame(data) {
+        try {
+            const res = await fetch(data.url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken(),
+                },
+                body: JSON.stringify({
+                    ringkasan: true,
+                    pertanyaan: 'ringkasan',
+                    tepat: true,
+                    benar: data.benar,
+                    salah: data.salah,
+                    skor: data.skor,
+                    _token: csrfToken(),
+                }),
+            });
+
+            return res.ok;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    window.TikPendingGame = {
+        /** Simpan ringkasan yang gagal terkirim, dibedakan per misi. */
+        save(missionId, data) {
+            try {
+                localStorage.setItem(PENDING_GAME_KEY + missionId, JSON.stringify(data));
+            } catch (e) {
+                // localStorage bisa diblokir; abaikan saja.
+            }
+        },
+
+        clear(missionId) {
+            try {
+                localStorage.removeItem(PENDING_GAME_KEY + missionId);
+            } catch (e) {
+                // Diabaikan.
+            }
+        },
+
+        /**
+         * Kirim ulang semua ringkasan yang tertunda.
+         *
+         * Aman dipanggil berkali-kali: server menghitung XP dari angka yang
+         * dikirim (bukan menambahkannya), jadi kiriman ganda tidak
+         * menggandakan XP.
+         */
+        flush() {
+            const keys = [];
+
+            try {
+                for (let i = 0; i < localStorage.length; i += 1) {
+                    const key = localStorage.key(i);
+                    if (key && key.indexOf(PENDING_GAME_KEY) === 0) keys.push(key);
+                }
+            } catch (e) {
+                return;
+            }
+
+            keys.forEach((key) => {
+                let data = null;
+
+                try {
+                    data = JSON.parse(localStorage.getItem(key));
+                } catch (e) {
+                    data = null;
+                }
+
+                // Data rusak / tanpa alamat tujuan: buang supaya tidak menumpuk.
+                if (!data || !data.url) {
+                    try { localStorage.removeItem(key); } catch (e) { /* diabaikan */ }
+                    return;
+                }
+
+                kirimRingkasanGame(data).then((ok) => {
+                    if (!ok) return; // biarkan tersimpan untuk dicoba lagi nanti
+
+                    try { localStorage.removeItem(key); } catch (e) { /* diabaikan */ }
+                });
+            });
+        },
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
         initTimers();
         initConfirm();
         initSoundToggle();
         initSubmitGuard();
         initFullscreen();
+
+        // Kirim ulang ringkasan permainan yang dulu gagal terkirim.
+        window.TikPendingGame.flush();
 
         // Tampilkan flash message dari server sebagai toast.
         const flash = document.getElementById('tik-flash');

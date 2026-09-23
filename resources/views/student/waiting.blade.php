@@ -57,6 +57,17 @@
                 <p id="wait-timer" class="font-mono text-4xl font-black text-sky-600 tabular-nums">--:--</p>
             </div>
 
+            {{--
+                Ronde yang sedang terbuka. Dipakai bila guru membuka beberapa ronde
+                sekaligus: kelompok diminta memilih sendiri, bukan dipaksa pindah.
+            --}}
+            <div id="wait-rounds" class="mt-4 hidden text-left">
+                <p class="text-xs font-bold uppercase tracking-wider text-ink-500">
+                    Ronde yang sedang terbuka
+                </p>
+                <div id="wait-rounds-list" class="mt-2 space-y-2"></div>
+            </div>
+
             {{-- Skor sementara --}}
             <div class="mt-6 grid gap-3 sm:grid-cols-2">
                 <div class="rounded-2xl border-2 border-mint-400/30 bg-mint-400/10 p-4">
@@ -112,6 +123,8 @@
             const missionEl = document.getElementById('wait-mission');
             const timerBox = document.getElementById('wait-timer-box');
             const timerEl = document.getElementById('wait-timer');
+            const roundsBox = document.getElementById('wait-rounds');
+            const roundsList = document.getElementById('wait-rounds-list');
 
             let remaining = null;
             let ticker = null;
@@ -126,6 +139,38 @@
                 const m = Math.floor(remaining / 60);
                 const s = remaining % 60;
                 timerEl.textContent = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+            }
+
+            // Tampilkan daftar ronde terbuka (hanya bila lebih dari satu).
+            function renderOpenRounds(list) {
+                if (!roundsBox || !roundsList) return;
+
+                roundsList.innerHTML = '';
+
+                if (!list || list.length <= 1) {
+                    roundsBox.classList.add('hidden');
+                    return;
+                }
+
+                roundsBox.classList.remove('hidden');
+
+                list.forEach(function (r) {
+                    const link = document.createElement('a');
+                    link.href = r.url;
+                    link.className =
+                        'flex items-center justify-between gap-3 rounded-2xl border-2 border-sky-100 bg-white px-4 py-3 text-sm font-bold text-ink-800 transition hover:border-sky-400 hover:bg-sky-50';
+
+                    const label = document.createElement('span');
+                    label.textContent = 'Ronde ' + r.order + ': ' + r.title;
+
+                    const cta = document.createElement('span');
+                    cta.className = 'shrink-0 text-sky-600';
+                    cta.textContent = 'Kerjakan →';
+
+                    link.appendChild(label);
+                    link.appendChild(cta);
+                    roundsList.appendChild(link);
+                });
             }
 
             function startTimer(seconds) {
@@ -165,10 +210,29 @@
                         return;
                     }
 
+                    renderOpenRounds(data.open_rounds || []);
+
                     if (roundEl) {
                         roundEl.textContent = data.round > 0
                             ? data.round + ' dari ' + data.total
                             : 'belum ada';
+                    }
+
+                    // Beberapa ronde terbuka sekaligus: tunjukkan pilihannya,
+                    // jangan pindahkan kelompok ke satu ronde saja.
+                    if (data.auto_switch === false) {
+                        if (data.can_work) {
+                            badgeEl.textContent = 'RONDE TERBUKA';
+                            badgeEl.className = 'badge bg-mint-400/25 text-mint-600';
+                        }
+
+                        missionEl.textContent = data.can_work
+                            ? 'Guru membuka beberapa ronde sekaligus. Pilih ronde yang ingin kalian kerjakan di bawah.'
+                            : 'Ronde sudah dibuka, tetapi belum untuk kelompokmu. Tunggu aba-aba guru.';
+
+                        startTimer(data.is_running ? data.seconds_remaining : null);
+
+                        return;
                     }
 
                     // Ronde berikutnya sudah dibuka: pindah otomatis.

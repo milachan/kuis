@@ -61,8 +61,6 @@ class RoundTimingTest extends TestCase
                 'is_active' => true,
             ]);
         }
-
-        app(MissionService::class)->generateCodes($this->session);
     }
 
     protected function teacher(): User
@@ -481,6 +479,153 @@ class RoundTimingTest extends TestCase
     {
         // Tanpa sesi kelompok, halaman menunggu dialihkan ke halaman masuk.
         $this->get('/student/waiting')->assertRedirect(route('student.join'));
+    }
+
+    // -----------------------------------------------------------------
+    // JAM KELAS (batas waktu SESI, bukan batas waktu ronde)
+    // -----------------------------------------------------------------
+
+    public function test_sesi_baru_belum_menjalankan_jam_kelas(): void
+    {
+        $this->actingAs($this->teacher())->post('/teacher/sessions', [
+            'name' => 'Sesi Baru',
+            'code' => 'TIK-BARU',
+            'duration_minutes' => 60,
+        ]);
+
+        $baru = GameSession::query()->where('code', 'TIK-BARU')->firstOrFail();
+
+        // Sesi yang masih disiapkan guru tidak boleh kehabisan waktu.
+        $this->assertNull($baru->start_time);
+        $this->assertFalse($baru->timeLimitActive());
+        $this->assertFalse($baru->isTimeUp());
+        $this->assertTrue($baru->acceptsSubmissions());
+    }
+
+    public function test_jam_kelas_mulai_saat_ronde_pertama_dibuka(): void
+    {
+        $this->joinTeam();
+
+        $this->session->update(['duration_minutes' => 60, 'start_time' => null]);
+
+        $this->startRound(1, 10);
+
+        $session = $this->session->fresh();
+
+        // Jam kelas baru berjalan setelah permainan dimulai, dengan sisa penuh.
+        $this->assertNotNull($session->start_time);
+        $this->assertGreaterThan(3500, $session->secondsRemaining());
+        $this->assertFalse($session->isTimeUp());
+    }
+
+    public function test_membuka_ronde_menyalakan_ulang_jam_kelas_yang_sudah_habis(): void
+    {
+        $this->joinTeam();
+
+        // Sesi 30 menit yang jamnya sudah habis 2 jam lalu.
+        $this->session->update(['duration_minutes' => 30, 'start_time' => now()->subHours(2)]);
+
+        $this->assertTrue($this->session->fresh()->isTimeUp());
+
+        // Guru masih membuka ronde — kelas jelas belum selesai.
+        $this->startRound(1, 10);
+
+        $this->assertFalse(
+            $this->session->fresh()->isTimeUp(),
+            'Membuka ronde harus menyalakan ulang jam kelas supaya kiriman tidak ditolak diam-diam.'
+        );
+    }
+
+    public function test_guru_dapat_menambah_waktu_sesi_yang_sudah_habis(): void
+    {
+        $this->session->update(['duration_minutes' => 30, 'start_time' => now()->subHours(2)]);
+
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/time/extend', ['minutes' => 15]);
+
+        $sisa = $this->session->fresh()->secondsRemaining();
+
+        $this->assertNotNull($sisa);
+        $this->assertGreaterThan(880, $sisa, 'Tambahan waktu dihitung dari sekarang bila jam sudah habis.');
+        $this->assertFalse($this->session->fresh()->isTimeUp());
+    }
+
+    public function test_guru_dapat_mematikan_batas_waktu_sesi(): void
+    {
+        $this->session->update(['duration_minutes' => 30, 'start_time' => now()->subHours(2)]);
+
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/time/unlimited');
+
+        $session = $this->session->fresh();
+
+        $this->assertSame(0, $session->duration_minutes);
+        $this->assertFalse($session->hasTimer());
+        $this->assertTrue($session->acceptsSubmissions());
+    }
+
+    // -----------------------------------------------------------------
+    // MURID TERLAMBAT vs JAM KELAS
+    // -----------------------------------------------------------------
+
+    public function test_kelompok_yang_sudah_mulai_tidak_bisa_mengirim_setelah_jam_kelas_habis(): void
+    {
+        $this->session->update(['duration_minutes' => 30, 'start_time' => now()]);
+
+        $team = $this->joinTeam();
+        $m1 = Mission::query()->where('order', 1)->firstOrFail();
+
+        // Tanpa batas waktu ronde, supaya yang diuji hanya jam kelasnya.
+        $this->startRound(1, 0);
+
+        $this->get('/student/mission/'.$m1->id);
+
+        // Jam kelas habis sementara mereka sudah lebih dulu mengerjakan.
+        $this->travel(31)->minutes();
+
+        $response = $this->post('/student/mission/'.$m1->id.'/submit', [
+            'answer' => 'Jawaban yang dikirim setelah jam kelas habis.',
+        ]);
+
+        $response->assertSessionHas('error');
+        $this->assertDatabaseCount('submissions', 0);
+    }
+
+    public function test_kelompok_terlambat_tetap_bisa_mengerjakan_setelah_jam_kelas_habis(): void
+    {
+        $this->session->update(['duration_minutes' => 30, 'start_time' => now()]);
+
+        $this->joinTeam('Kelompok Awal');
+        $this->startRound(1, 10);
+
+        // Jam kelas habis sementara kelas masih mengerjakan.
+        $this->travel(31)->minutes();
+
+        // Guru membuka lobi supaya murid yang tertinggal bisa ikut masuk.
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/lobby');
+
+        $this->flushSession();
+
+        $this->post('/student/join', [
+            'code' => 'TIK-TIME',
+            'team_name' => 'Kelompok Terlambat',
+            'members' => ['Budi'],
+        ]);
+
+        $m1 = Mission::query()->where('order', 1)->firstOrFail();
+
+        // Halaman ronde tidak boleh menakut-nakuti murid yang baru masuk.
+        $this->get('/student/mission/'.$m1->id)
+            ->assertOk()
+            ->assertDontSee('Waktu sesi sudah habis');
+
+        $response = $this->post('/student/mission/'.$m1->id.'/submit', [
+            'answer' => 'Saya baru masuk setelah jam kelas habis, tetapi masih bisa mengerjakan.',
+        ]);
+
+        $response->assertSessionHasNoErrors();
+        $this->assertDatabaseCount('submissions', 1);
     }
 
     // -----------------------------------------------------------------

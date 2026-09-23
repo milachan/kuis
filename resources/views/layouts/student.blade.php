@@ -94,16 +94,27 @@
                     {{-- Timer --}}
                     <div class="rounded-2xl border-2 border-grape-400/30 bg-grape-400/10 px-3 py-2">
                         <p class="text-[10px] font-bold uppercase tracking-wider text-ink-500">Sisa Waktu</p>
-                        @if ($session->hasTimer())
+                        @if ($session->timeLimitActive())
                             <p class="text-sm font-black text-ink-800" data-timer="{{ $session->secondsRemaining() }}">
                                 {{ $session->formattedRemaining() }}
                             </p>
+                        @elseif ($session->hasTimer())
+                            {{-- Batas waktu dipilih guru, tetapi jam kelas belum berjalan --}}
+                            {{-- (baru dinyalakan saat ronde pertama dibuka).           --}}
+                            <p class="text-sm font-black text-ink-500">Belum dimulai</p>
                         @else
                             <p class="text-sm font-black text-ink-500">Tanpa batas</p>
                         @endif
                     </div>
                 </div>
             @endisset
+
+            {{-- Pemilih ronde: selalu ada di header supaya anak tidak perlu
+                 mencari ke dashboard setiap kali mau berpindah ronde. --}}
+            @include('student.partials.round-nav', [
+                'roundNav' => $roundNav ?? collect(),
+                'currentMission' => $mission ?? null,
+            ])
         </div>
     </header>
 

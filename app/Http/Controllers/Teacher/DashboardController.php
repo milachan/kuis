@@ -87,7 +87,7 @@ class DashboardController extends Controller
     }
 
     /**
-     * Simpan sesi baru beserta kode rahasia tiap misi.
+     * Simpan sesi baru.
      */
     public function storeSession(Request $request)
     {
@@ -109,14 +109,14 @@ class DashboardController extends Controller
             'name' => $validated['name'],
             'code' => strtoupper($validated['code']),
             'duration_minutes' => $validated['duration_minutes'],
-            'start_time' => now(),
+            // Jam kelas BELUM berjalan: baru dinyalakan saat guru membuka ronde
+            // pertama, supaya durasi sesi tidak habis selama persiapan kelas.
+            'start_time' => null,
             'status' => GameSession::STATUS_ACTIVE,
             'leaderboard_enabled' => $request->boolean('leaderboard_enabled'),
             'hints_enabled' => $request->boolean('hints_enabled', true),
             'is_demo' => false,
         ]);
-
-        $this->missions->generateCodes($session);
 
         return redirect()
             ->route('teacher.sessions.show', $session)
@@ -124,12 +124,11 @@ class DashboardController extends Controller
     }
 
     /**
-     * Detail sesi: kode rahasia, tim, progres.
+     * Detail sesi: tim dan progres.
      */
     public function showSession(GameSession $session)
     {
         $missionList = Mission::query()->active()->ordered()->get();
-        $codes = $this->missions->codesForSession($session);
 
         $teams = $session->teams()
             ->withCount('members')
@@ -149,7 +148,7 @@ class DashboardController extends Controller
                 ];
             });
 
-        return view('teacher.sessions.show', compact('session', 'missionList', 'codes', 'teams'));
+        return view('teacher.sessions.show', compact('session', 'missionList', 'teams'));
     }
 
     /**
@@ -159,13 +158,12 @@ class DashboardController extends Controller
     {
         $durationOptions = config('tikmission.duration_options');
         $missionList = Mission::query()->active()->ordered()->get();
-        $codes = $this->missions->codesForSession($session);
 
-        return view('teacher.sessions.edit', compact('session', 'durationOptions', 'missionList', 'codes'));
+        return view('teacher.sessions.edit', compact('session', 'durationOptions', 'missionList'));
     }
 
     /**
-     * Update sesi + kode rahasia tiap misi.
+     * Update sesi.
      */
     public function updateSession(Request $request, GameSession $session)
     {
@@ -176,8 +174,6 @@ class DashboardController extends Controller
             'duration_minutes' => ['required', 'integer', 'min:0', 'max:600'],
             'leaderboard_enabled' => ['nullable', 'boolean'],
             'hints_enabled' => ['nullable', 'boolean'],
-            'codes' => ['nullable', 'array'],
-            'codes.*' => ['nullable', 'string', 'max:40'],
         ], [
             'name.required' => 'Nama sesi wajib diisi.',
             'code.unique' => 'Kode sesi sudah dipakai. Gunakan kode lain.',
@@ -190,18 +186,6 @@ class DashboardController extends Controller
             'leaderboard_enabled' => $request->boolean('leaderboard_enabled'),
             'hints_enabled' => $request->boolean('hints_enabled'),
         ]);
-
-        // Simpan kode rahasia per misi.
-        foreach ($request->input('codes', []) as $missionId => $code) {
-            if (! $code) {
-                continue;
-            }
-
-            $mission = Mission::query()->find($missionId);
-            if ($mission) {
-                $this->missions->setCode($session, $mission, $code);
-            }
-        }
 
         return redirect()
             ->route('teacher.sessions.show', $session)
@@ -243,7 +227,6 @@ class DashboardController extends Controller
             foreach ($session->teams as $team) {
                 $this->teams->delete($team, $this->submissions);
             }
-            $session->missionCodes()->delete();
             $session->delete();
         });
 

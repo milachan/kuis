@@ -71,15 +71,33 @@ class GameRondeTest extends TestCase
         }
     }
 
-    public function test_setiap_ronde_hanya_satu_soal_game(): void
+    public function test_setiap_ronde_punya_delapan_soal_game(): void
     {
-        // Satu soal per ronde supaya anak tidak bingung, dan permainan
-        // harus benar-benar menyelesaikan soal itu sebelum ronde selesai.
+        // Delapan soal per ronde: satu kali bermain harus terasa seperti kuis
+        // beberapa soal, bukan tamat setelah satu jawaban benar.
         foreach (Mission::query()->active()->ordered()->get() as $mission) {
             $this->assertSame(
-                1,
+                8,
                 $mission->gameQuestionCount(),
-                "Ronde {$mission->order} seharusnya punya tepat 1 soal game."
+                "Ronde {$mission->order} seharusnya punya 8 soal game."
+            );
+        }
+    }
+
+    public function test_kunci_jawaban_game_tidak_selalu_pilihan_pertama(): void
+    {
+        // Kalau jawaban benar selalu di pilihan pertama, anak menghafal posisi
+        // tombol tanpa membaca soalnya.
+        foreach (Mission::query()->active()->get() as $mission) {
+            $posisi = array_map(
+                fn (array $q) => (int) $q['jawaban'],
+                $mission->gameQuestionList()
+            );
+
+            $this->assertGreaterThanOrEqual(
+                2,
+                count(array_unique($posisi)),
+                "Ronde {$mission->order}: posisi jawaban benar terlalu seragam."
             );
         }
     }
@@ -203,10 +221,13 @@ class GameRondeTest extends TestCase
     {
         $js = file_get_contents(resource_path('js/game.js'));
 
+        // Normalisasi akhir baris supaya pencarian batas fungsi tetap akurat.
+        $js = str_replace(["\r\n", "\r"], "\n", $js);
+
         // Harus ada panggilan untuk MASUK layar penuh saat mulai bermain.
         $this->assertStringContainsString('requestFullscreen', $js);
 
-        // Harus ada panggilan untuk KELUAR layar penuh (tombol & otomatis).
+        // Harus ada panggilan untuk KELUAR layar penuh (lewat tombol panggung).
         $this->assertStringContainsString('exitFullscreen', $js);
 
         // Layar penuh dipanggil dari fungsi mulaiMain (aksi tekanan tombol).
@@ -216,11 +237,29 @@ class GameRondeTest extends TestCase
             'Fungsi mulaiMain harus memanggil masukLayarPenuh().'
         );
 
-        // Dan dikembalikan saat permainan selesai.
+        // Permainan selesai TIDAK boleh menutup layar penuh otomatis. Ronde game
+        // umumnya hanya berisi satu soal, sehingga penutupan otomatis membuat
+        // anak terlempar dari mode bermain tepat saat menekan jawaban.
+        $mulaiSelesai = strpos($js, 'function selesai(');
+        $this->assertNotFalse($mulaiSelesai, 'Fungsi selesai() harus ada.');
+
+        // Batas fungsi: baris berikutnya yang ditutup tepat pada indentasi 8 spasi.
+        $akhirSelesai = strpos($js, "\n        }\n", $mulaiSelesai);
+        $this->assertNotFalse($akhirSelesai, 'Penutup fungsi selesai() tidak ditemukan.');
+
+        $badanSelesai = substr($js, $mulaiSelesai, $akhirSelesai - $mulaiSelesai);
+
+        $this->assertStringNotContainsString(
+            'keluarLayarPenuh()',
+            $badanSelesai,
+            'Fungsi selesai() tidak boleh memanggil keluarLayarPenuh() secara otomatis.'
+        );
+
+        // Tombol panggung tetap menjadi satu-satunya cara keluar layar penuh.
         $this->assertMatchesRegularExpression(
-            '/function selesai\(.*?keluarLayarPenuh\(\)/s',
+            '/btnKeluarFs\.addEventListener\([\s\S]*?keluarLayarPenuh\(\)/',
             $js,
-            'Fungsi selesai harus memanggil keluarLayarPenuh().'
+            'Tombol layar penuh harus memanggil keluarLayarPenuh().'
         );
     }
 
@@ -230,8 +269,30 @@ class GameRondeTest extends TestCase
 
         // Permainan harus berakhir saat semua soal sudah dijawab benar,
         // bukan mengulang soal yang sama tanpa henti.
-        $this->assertStringContainsString('indeksSoal >= soal.length', $js);
         $this->assertStringContainsString('Semua soal selesai', $js);
+
+        // Daftar soal harus disiapkan ulang SETIAP ronde di mulaiMain(), supaya
+        // ronde baru tidak langsung tamat karena sisa daftar dari ronde sebelumnya.
+        $this->assertMatchesRegularExpression(
+            '/function mulaiMain\([\s\S]*?tumpukan = acak\(soal\);/',
+            $js,
+            'mulaiMain() harus menyiapkan ulang daftar soal tiap ronde.'
+        );
+
+        // Dan daftar itu tidak boleh diisi ulang saat habis: soal yang sudah
+        // dijawab benar tidak muncul lagi (tidak berputar tanpa henti).
+        $this->assertSame(
+            1,
+            substr_count($js, 'tumpukan = acak(soal);'),
+            'Daftar soal hanya boleh diisi di mulaiMain(), bukan diisi ulang di ambilSoal().'
+        );
+
+        // Jawaban salah menawarkan soal yang SAMA lagi, bukan menghabiskan soal.
+        $this->assertMatchesRegularExpression(
+            '/function jawab\([\s\S]*?gambarSoal\(\);/',
+            $js,
+            'Jawaban salah harus menampilkan ulang soal yang sama lewat gambarSoal().'
+        );
     }
 
     public function test_gaya_layar_penuh_tersedia_di_css(): void
@@ -309,6 +370,196 @@ class GameRondeTest extends TestCase
         $this->assertTrue($submission === null || empty($submission->game_missed));
     }
 
+    // -----------------------------------------------------------------
+    // PAPAN HASIL: PERAYAAN & ARAHAN KE SOAL URAIAN
+    // -----------------------------------------------------------------
+
+    public function test_papan_hasil_berada_di_dalam_panggung_dan_mengarah_ke_soal_uraian(): void
+    {
+        $this->joinTeam();
+        $mission = $this->bukaRonde(1);
+
+        $html = $this->get('/student/mission/'.$mission->id.'/game')->getContent();
+
+        $panggung = strpos($html, 'id="game-stage"');
+        $hasil = strpos($html, 'id="game-hasil"');
+        $caraMain = strpos($html, 'CARA MAIN');
+
+        $this->assertNotFalse($hasil, 'Papan hasil game harus ada di halaman game.');
+
+        // Papan hasil harus DI DALAM panggung layar penuh, bukan di bawahnya:
+        // kalau di luar, anak yang bermain layar penuh tidak melihat hasilnya.
+        $this->assertGreaterThan($panggung, $hasil, 'Papan hasil harus berada di dalam panggung.');
+        $this->assertLessThan($caraMain, $hasil, 'Papan hasil harus berada di dalam panggung.');
+
+        // Tombol utama mengarahkan ke soal uraian ronde ini.
+        $this->assertStringContainsString('id="hasil-lanjut"', $html);
+        $this->assertStringContainsString(route('student.mission.show', $mission), $html);
+        $this->assertStringContainsString('Soal Uraian', $html);
+
+        // Dan menyediakan tombol bermain ulang, bukan langsung memaksa pindah.
+        $this->assertStringContainsString('id="hasil-ulang"', $html);
+    }
+
+    public function test_skrip_game_merayakan_hasil_dan_menampilkan_xp_yang_didapat(): void
+    {
+        $js = file_get_contents(resource_path('js/game.js'));
+
+        // Perayaan: bintang sesuai akurasi + konfeti (tanpa pustaka luar).
+        $this->assertStringContainsString('hasil-bintang', $js);
+        $this->assertStringContainsString('hujanKonfeti', $js);
+        $this->assertStringContainsString('tik-confetti', $js);
+
+        // XP dari server ditampilkan, bukan hanya disimpan diam-diam.
+        $this->assertStringContainsString('xp_gain', $js);
+        $this->assertStringContainsString('total_xp', $js);
+
+        // Anak diarahkan ke soal uraian: tombol + hitung mundur.
+        $this->assertStringContainsString('hasil-lanjut', $js);
+        $this->assertStringContainsString('mulaiHitungMundur', $js);
+
+        // Konfeti juga harus punya gayanya, dan dihormati bila anak sensitif
+        // terhadap gerakan.
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertStringContainsString('tik-confetti', $css);
+        $this->assertStringContainsString('prefers-reduced-motion', $css);
+    }
+
+    public function test_papan_hasil_benar_benar_berada_di_dalam_pembungkus_papan(): void
+    {
+        // Posisi papan hasil bergantung pada STRUKTUR DOM, bukan urutan teks di
+        // file. Kalau ada satu tag penutup yang berlebih/kurang, browser akan
+        // mengeluarkan elemen ini dari .tik-papan sehingga hasilnya jatuh ke
+        // BAWAH papan permainan walaupun CSS-nya benar.
+        $this->joinTeam();
+        $mission = $this->bukaRonde(1);
+
+        $html = $this->get('/student/mission/'.$mission->id.'/game')->getContent();
+
+        libxml_use_internal_errors(true);
+        $doc = new \DOMDocument;
+        $doc->loadHTML($html);
+        libxml_clear_errors();
+
+        $xpath = new \DOMXPath($doc);
+
+        $hasil = $xpath->query('//*[@id="game-hasil"]')->item(0);
+        $kanvas = $xpath->query('//*[@id="game-canvas"]')->item(0);
+
+        $this->assertNotNull($hasil, 'Papan hasil harus ada di halaman game.');
+        $this->assertNotNull($kanvas, 'Kanvas game harus ada.');
+
+        $pembungkusHasil = $xpath->query('ancestor::*[contains(@class, "tik-papan")]', $hasil)->item(0);
+        $pembungkusKanvas = $xpath->query('ancestor::*[contains(@class, "tik-papan")]', $kanvas)->item(0);
+
+        $this->assertNotNull($pembungkusHasil, 'Papan hasil harus berada di dalam .tik-papan.');
+        $this->assertNotNull($pembungkusKanvas, 'Kanvas harus berada di dalam .tik-papan.');
+
+        // Kelas .tik-hasil WAJIB terpasang di ELEMEN-nya, bukan hanya ada di
+        // file CSS. Kalau kelasnya lupa dipasang, CSS lapisan tidak menempel dan
+        // papan hasil jatuh mengalir DI BAWAH papan permainan.
+        $this->assertStringContainsString(
+            'tik-hasil',
+            (string) $hasil->getAttribute('class'),
+            'Elemen papan hasil harus memakai kelas .tik-hasil.'
+        );
+
+        // Keduanya harus berbagi pembungkus yang SAMA, supaya lapisan hasil
+        // menempel tepat di atas papan permainan.
+        $this->assertSame(
+            $pembungkusKanvas->getNodePath(),
+            $pembungkusHasil->getNodePath(),
+            'Papan hasil dan kanvas harus berada di dalam pembungkus papan yang sama.'
+        );
+    }
+
+    public function test_papan_hasil_menutupi_papan_permainan_tanpa_perlu_menggulir(): void
+    {
+        $css = file_get_contents(resource_path('css/app.css'));
+        $js = file_get_contents(resource_path('js/game.js'));
+
+        // Papan hasil menutupi PAPAN PERMAINAN, bukan seluruh layar: papan itu
+        // sudah dilihat anak sejak mulai bermain, jadi hasilnya muncul di depan
+        // mata tanpa perlu menggulir halaman.
+        $this->assertStringContainsString('.tik-papan', $css);
+        $this->assertMatchesRegularExpression('/\.tik-papan\s*\{[^}]*position:\s*relative;/s', $css);
+
+        // Kartunya dipusatkan di dalam papan, dan LAPISANNYA yang bergulir bila
+        // layarnya sangat pendek — bukan halaman.
+        $this->assertStringContainsString('.tik-hasil-kartu', $css);
+        $this->assertMatchesRegularExpression('/margin:\s*auto;/', $css);
+        $this->assertMatchesRegularExpression('/\.tik-hasil\s*\{[^}]*overflow-y:\s*auto;/s', $css);
+
+        // Visibilitas lewat atribut `hidden`, bukan kelas utility, supaya tidak
+        // bentrok dengan display:flex milik lapisan itu.
+        $this->assertStringContainsString('.tik-hasil[hidden]', $css);
+        $this->assertStringContainsString('elHasil.hidden = false;', $js);
+        $this->assertStringContainsString('elHasil.hidden = true;', $js);
+        $this->assertStringNotContainsString("elHasil.classList.remove('hidden')", $js);
+
+        // Harus ada jalan keluar tanpa menunggu hitungan mundur.
+        $this->assertStringContainsString('hasil-tutup', $js);
+
+        // Di HTML: papan hasil harus berada DI DALAM papan permainan — setelah
+        // kanvas dan sebelum pesan permainan yang ada di bawah kanvas.
+        $this->joinTeam();
+        $mission = $this->bukaRonde(1);
+
+        $html = $this->get('/student/mission/'.$mission->id.'/game')->getContent();
+
+        $kanvas = strpos($html, 'id="game-canvas"');
+        $hasil = strpos($html, 'id="game-hasil"');
+        $pesan = strpos($html, 'id="game-pesan"');
+
+        $this->assertNotFalse($kanvas);
+        $this->assertNotFalse($hasil);
+        $this->assertNotFalse($pesan);
+        $this->assertGreaterThan($kanvas, $hasil, 'Papan hasil harus berada di dalam papan permainan.');
+        $this->assertLessThan($pesan, $hasil, 'Papan hasil harus menempel pada papan permainan, bukan di bawahnya.');
+    }
+
+    public function test_tombol_main_lagi_membatalkan_arahan_pindah_ronde(): void
+    {
+        // Bila anak memilih bermain ulang, hitung mundur ke soal uraian HARUS
+        // dibatalkan — kalau tidak, dia dipindahkan di tengah permainan.
+        $js = file_get_contents(resource_path('js/game.js'));
+
+        $this->assertMatchesRegularExpression(
+            '/batalHitungMundur\(\);\s*\n\s*mulaiMain\(\);/',
+            $js,
+            'Tombol Main Lagi harus membatalkan hitung mundur sebelum memulai ulang.'
+        );
+    }
+
+    public function test_halaman_misi_mengingatkan_lanjut_ke_soal_uraian_setelah_main_game(): void
+    {
+        $this->joinTeam();
+        $mission = $this->bukaRonde(1);
+
+        // Mainkan sampai selesai (ringkasan permainan terkirim).
+        $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
+            'ringkasan' => true,
+            'benar' => 8,
+            'salah' => 0,
+            'skor' => 300,
+            'pertanyaan' => 'ringkasan',
+            'tepat' => true,
+        ])->assertOk();
+
+        $response = $this->get('/student/mission/'.$mission->id);
+
+        $response->assertOk();
+
+        // Anak harus diberi tahu bahwa permainan hanya separuh ronde.
+        $response->assertSee('Hasil Game Ronde Ini');
+        $response->assertSee('soal uraian');
+        $response->assertSee('Hasil Game Sudah Tercatat');
+
+        // Dan TIDAK boleh diberi tahu bahwa jawabannya sudah terkirim:
+        // yang tersimpan baru ringkasan permainan, soal uraian belum dijawab.
+        $response->assertDontSee('Jawaban Terkirim');
+    }
+
     public function test_ringkasan_permainan_menyimpan_hasil_dan_memberi_xp(): void
     {
         $team = $this->joinTeam();
@@ -327,6 +578,12 @@ class GameRondeTest extends TestCase
         $response->assertJsonPath('benar', 7);
         $response->assertJsonPath('salah', 1);
 
+        // Papan hasil memerlukan tambahan XP dari permainan ini (bukan hanya
+        // total misi) supaya anak melihat efek jawabannya.
+        $response->assertJsonStructure(['xp', 'xp_gain', 'total_xp']);
+        $this->assertGreaterThan(0, $response->json('xp_gain'));
+        $this->assertSame($response->json('xp'), $response->json('total_xp'));
+
         $submission = Submission::query()->firstOrFail();
 
         $this->assertSame(7, $submission->game_correct);
@@ -336,6 +593,128 @@ class GameRondeTest extends TestCase
 
         // XP kelompok harus bertambah dari hasil game.
         $this->assertGreaterThan(0, $team->fresh()->xp);
+    }
+
+    public function test_ringkasan_persis_seperti_yang_dikirim_browser_tetap_tersimpan(): void
+    {
+        // REGRESI PENTING: browser mengirim ringkasan HANYA berisi
+        // {ringkasan, benar, salah, skor} — tanpa "pertanyaan" dan "tepat".
+        // Ketika validasi mewajibkan keduanya, setiap ringkasan ditolak 422
+        // sehingga XP game tidak pernah masuk ke XP kelompok.
+        $team = $this->joinTeam();
+        $mission = $this->bukaRonde(1);
+
+        $response = $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
+            'ringkasan' => true,
+            'benar' => 8,
+            'salah' => 0,
+            'skor' => 120,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('ok', true);
+
+        $submission = Submission::query()->firstOrFail();
+
+        $this->assertSame(8, $submission->game_correct);
+        $this->assertNotNull($submission->game_played_at);
+
+        // XP kelompok WAJIB bertambah, dan jawabannya sudah ada untuk guru.
+        $this->assertGreaterThan(0, $team->fresh()->xp);
+        $this->assertStringContainsString('Hasil game', (string) $submission->answer);
+    }
+
+    public function test_xp_game_tetap_terkirim_saat_ronde_dihentikan_atau_waktu_habis(): void
+    {
+        $js = file_get_contents(resource_path('js/game.js'));
+
+        // Ronde bisa berhenti saat anak masih bermain (guru menekan Hentikan
+        // Ronde, timer ronde habis, atau waktu sesi habis). Hasil permainan
+        // harus tetap dikirim pada saat itu, bukan menunggu anak menyelesaikan
+        // semua soal — asal sudah menjawab minimal satu soal.
+        $this->assertStringContainsString('awasiBerhentinyaRonde', $js);
+        $this->assertStringContainsString('roundStatus', $js);
+        $this->assertStringContainsString('Ronde dihentikan guru', $js);
+        $this->assertStringContainsString('Waktu ronde habis', $js);
+        $this->assertStringContainsString('Waktu sesi habis', $js);
+
+        // Syaratnya: sudah menjawab sesuatu.
+        $this->assertStringContainsString('benar + salah === 0', $js);
+    }
+
+    public function test_ringkasan_disimpan_dan_dikirim_ulang_bila_gagal_terkirim(): void
+    {
+        $js = file_get_contents(resource_path('js/game.js'));
+        $app = file_get_contents(resource_path('js/app.js'));
+
+        // Gagal terkirim -> disimpan di browser, bukan dibuang.
+        $this->assertStringContainsString('TikPendingGame?.save', $js);
+        $this->assertStringContainsString('TikPendingGame?.clear', $js);
+
+        // Tab ditutup di tengah permainan -> dititipkan lewat sendBeacon,
+        // dengan cadangan di browser bila titipannya gagal.
+        $this->assertStringContainsString('pagehide', $js);
+        $this->assertStringContainsString('sendBeacon', $js);
+
+        // Dicoba kirim ulang setiap halaman siswa dibuka.
+        $this->assertStringContainsString('tik-game-pending-', $app);
+        $this->assertStringContainsString('TikPendingGame.flush()', $app);
+
+        // Halaman game harus memberi tahu mesin permainan ronde mana yang
+        // sedang dipantau.
+        $this->joinTeam();
+        $mission = $this->bukaRonde(1);
+
+        $html = $this->get('/student/mission/'.$mission->id.'/game')->getContent();
+
+        $this->assertStringContainsString('data-round-status', $html);
+        $this->assertStringContainsString('data-mission-id', $html);
+        $this->assertStringContainsString('data-mission-order="1"', $html);
+    }
+
+    public function test_jawaban_biasa_tetap_butuh_pertanyaan_dan_tepat(): void
+    {
+        // Pelonggaran validasi hanya untuk ringkasan: kiriman satu jawaban
+        // tetap harus lengkap, supaya catatan jawaban salah tidak rusak.
+        $this->joinTeam();
+        $mission = $this->bukaRonde(1);
+
+        $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
+            'pilihan' => 'Hardware',
+        ])->assertStatus(422);
+    }
+
+    public function test_kolom_jawaban_uraian_tidak_terisi_teks_hasil_game(): void
+    {
+        $this->joinTeam();
+        $mission = $this->bukaRonde(1);
+
+        // Main game sampai selesai: server mengisi kolom jawaban dengan
+        // ringkasan permainan supaya guru melihat hasilnya.
+        $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
+            'ringkasan' => true,
+            'benar' => 8,
+            'salah' => 0,
+            'skor' => 120,
+        ])->assertOk();
+
+        $this->assertStringContainsString(
+            '[Hasil game',
+            (string) Submission::query()->firstOrFail()->answer
+        );
+
+        $html = $this->get('/student/mission/'.$mission->id)->getContent();
+
+        // Kolom jawaban uraian harus tetap KOSONG: teks otomatis itu bukan
+        // tulisan siswa, dan tidak boleh bisa dikirim sebagai jawaban uraian
+        // lalu dinilai AI.
+        $this->assertMatchesRegularExpression(
+            '/<textarea[^>]*id="answer"[^>]*>\s*<\/textarea>/s',
+            $html,
+            'Kolom jawaban uraian tidak boleh terisi teks hasil game.'
+        );
+
+        $this->assertStringNotContainsString('[Hasil game', $html);
     }
 
     public function test_ringkasan_menuliskan_hasil_ke_kolom_jawaban(): void
@@ -590,7 +969,6 @@ class GameRondeTest extends TestCase
         $response->assertSee('Bagikan Kode Sesi');
         $response->assertSee('Jalankan Ronde');
         $response->assertSee('Pantau Kelompok');
-        $response->assertSee('Kode Rahasia Tiap Ronde');
 
         // Tidak boleh ada tombol Layar Proyektor yang dobel.
         $jumlahTombol = substr_count($response->getContent(), 'Buka Layar Proyektor');

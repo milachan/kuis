@@ -45,8 +45,18 @@ class MissionController extends Controller
         $total = $progressList->count();
         $percent = $total > 0 ? (int) round(($completed / $total) * 100) : 0;
 
+        // Kelompok yang baru mulai mengerjakan rondenya setelah jam kelas habis
+        // tetap boleh lanjut (jatah waktu ronde miliknya sendiri).
+        $acceptsSubmissions = $session->acceptsSubmissionsFor($team);
+
+        // Ronde yang sedang dibuka guru. Dipakai untuk menandai kartu misi mana
+        // yang benar-benar bisa dikerjakan sekarang (sisanya masih terkunci),
+        // supaya anak tidak menebak-nebak kartu mana yang aktif.
+        $openRoundNumbers = $session->openRoundNumbers();
+
         return view('student.dashboard', compact(
-            'team', 'session', 'progressList', 'completed', 'total', 'percent'
+            'team', 'session', 'progressList', 'completed', 'total', 'percent', 'acceptsSubmissions',
+            'openRoundNumbers'
         ));
     }
 
@@ -66,17 +76,35 @@ class MissionController extends Controller
         $currentRound = (int) $session->current_round;
         $mission = $currentRound > 0 ? $rounds->missionForRound($currentRound) : null;
 
-        // Kelompok boleh berpindah bila misi ronde aktif sudah dibuka untuknya.
-        $canWork = false;
+        // Ronde yang sedang terbuka. Guru boleh membuka beberapa ronde sekaligus,
+        // sehingga kelompok perlu tahu semua pilihannya (bukan hanya satu).
+        $openRounds = collect($session->openRoundNumbers())
+            ->map(function (int $order) use ($rounds) {
+                $open = $rounds->missionForRound($order);
 
-        if ($mission) {
-            $progress = TeamProgress::query()
+                return $open ? [
+                    'id' => $open->id,
+                    'order' => $order,
+                    'title' => $open->title,
+                    'url' => route('student.mission.show', $open),
+                    'is_game' => $open->hasGame(),
+                ] : null;
+            })
+            ->filter()
+            ->values();
+
+        // Kelompok boleh berpindah bila ada minimal satu ronde terbuka yang sudah
+        // dibuka untuknya.
+        $canWork = $openRounds->isNotEmpty()
+            && TeamProgress::query()
                 ->where('team_id', $team->id)
-                ->where('mission_id', $mission->id)
-                ->first();
-
-            $canWork = $progress !== null && ! $progress->isLocked();
-        }
+                ->whereIn('mission_id', $openRounds->pluck('id'))
+                ->whereIn('status', [
+                    TeamProgress::STATUS_AVAILABLE,
+                    TeamProgress::STATUS_IN_PROGRESS,
+                    TeamProgress::STATUS_WAITING_VALIDATION,
+                ])
+                ->exists();
 
         return response()->json([
             'round' => $currentRound,
@@ -90,9 +118,13 @@ class MissionController extends Controller
                 'title' => $mission->title,
                 'url' => route('student.mission.show', $mission),
             ] : null,
+            'open_rounds' => $openRounds->all(),
+            // Bila beberapa ronde terbuka, halaman misi tidak boleh memaksa
+            // pindah: kelompok bebas memilih ronde mana yang mau dikerjakan.
+            'auto_switch' => $openRounds->count() <= 1,
             'can_work' => $canWork,
             'session_ended' => $session->isEnded(),
-            'accepts_submissions' => $session->acceptsSubmissions(),
+            'accepts_submissions' => $session->acceptsSubmissionsFor($team),
         ]);
     }
 
@@ -121,6 +153,13 @@ class MissionController extends Controller
                 ->with('error', 'Misi ini masih terkunci. Selesaikan misi sebelumnya terlebih dahulu.');
         }
 
+        // Jam kelas habis bukan alasan bagi kelompok yang baru mulai mengerjakan
+        // ronde ini (mis. murid yang masuk terlambat). Penilaiannya HARUS
+        // dilakukan sebelum markInProgress() mencatat waktu mulai yang baru —
+        // kalau tidak, setiap kelompok akan terlihat sebagai pendatang baru.
+        $acceptsSubmissions = $session->acceptsSubmissionsFor($team, $progress);
+        $lateGrace = $acceptsSubmissions && $session->isTimeUp() && $progress->work_started_at === null;
+
         // Mulai mengerjakan saat dibuka (waktu mulai dicatat di sini).
         $this->missions->markInProgress($progress);
 
@@ -138,7 +177,8 @@ class MissionController extends Controller
             : $progress->workSecondsRemaining($session->round_duration_minutes);
 
         return view('student.mission', compact(
-            'team', 'session', 'mission', 'progress', 'submission', 'hintsEnabled', 'workSeconds'
+            'team', 'session', 'mission', 'progress', 'submission', 'hintsEnabled', 'workSeconds',
+            'acceptsSubmissions', 'lateGrace'
         ));
     }
 
@@ -150,12 +190,9 @@ class MissionController extends Controller
         $team = $this->studentAuth->currentTeam();
         $session = $team->gameSession;
 
-        // Timer habis → tolak kiriman baru, tetapi data lama tetap aman.
-        if (! $session->acceptsSubmissions()) {
-            return back()->with('error',
-                $session->isEnded()
-                    ? 'Sesi sudah berakhir. Kiriman baru tidak dapat diproses.'
-                    : 'Waktu sesi sudah habis. Kiriman baru tidak dapat diproses.');
+        // Sesi sudah berakhir: tidak ada kiriman baru lagi (data lama tetap aman).
+        if ($session->isEnded()) {
+            return back()->with('error', 'Sesi sudah berakhir. Kiriman baru tidak dapat diproses.');
         }
 
         if (! $mission->is_active) {
@@ -177,6 +214,14 @@ class MissionController extends Controller
             return back()->with('error',
                 'Ronde misi ini sudah ditutup karena guru sudah membuka ronde berikutnya. '
                 .'Kerjakan ronde yang sedang aktif.');
+        }
+
+        // Jam kelas habis → tolak kiriman baru, TETAPI kelompok yang baru mulai
+        // mengerjakan ronde ini setelah jam kelas lewat (mis. murid yang masuk
+        // terlambat) tidak ikut terkunci: mereka memakai jatah waktu ronde
+        // miliknya sendiri.
+        if (! $session->acceptsSubmissionsFor($team, $progress)) {
+            return back()->with('error', 'Waktu sesi sudah habis. Kiriman baru tidak dapat diproses.');
         }
 
         // Batas waktu per siswa: dihitung sejak dia membuka halaman ronde.
@@ -309,10 +354,10 @@ class MissionController extends Controller
                 ->with('error', 'Ronde ini belum bisa dimainkan atau sudah selesai.');
         }
 
-        if (! $session->acceptsSubmissions()) {
+        if (! $session->acceptsSubmissionsFor($team, $progress)) {
             return redirect()
                 ->route('student.mission.show', $mission)
-                ->with('error', 'Sesi sudah berakhir. Permainan tidak dapat dimulai.');
+                ->with('error', 'Waktu sesi sudah habis. Permainan tidak dapat dimulai.');
         }
 
         // Soal game tidak boleh dibocorkan bersama kuncinya, jadi kunci
@@ -362,10 +407,16 @@ class MissionController extends Controller
             return response()->json(['ok' => false, 'message' => 'Ronde ini belum bisa dimainkan.'], 422);
         }
 
+        // Ada DUA jenis kiriman ke endpoint ini:
+        //   1. satu jawaban  -> wajib membawa pertanyaan & tepat;
+        //   2. ringkasan akhir permainan -> cukup benar/salah/skor.
+        // Browser hanya mengirim ketiga angka itu untuk ringkasan, jadi
+        // mewajibkan pertanyaan & tepat di sini membuat SEMUA ringkasan ditolak
+        // dan XP permainan tidak pernah sampai ke server.
         $validated = $request->validate([
-            'pertanyaan' => ['required', 'string', 'max:500'],
+            'pertanyaan' => ['required_without:ringkasan', 'nullable', 'string', 'max:500'],
             'pilihan' => ['nullable', 'string', 'max:500'],
-            'tepat' => ['required', 'boolean'],
+            'tepat' => ['required_without:ringkasan', 'nullable', 'boolean'],
             'ringkasan' => ['nullable', 'boolean'],
             'benar' => ['nullable', 'integer', 'min:0', 'max:200'],
             'salah' => ['nullable', 'integer', 'min:0', 'max:200'],
@@ -387,28 +438,37 @@ class MissionController extends Controller
                 'game_correct' => $benar,
                 'game_wrong' => $salah,
                 'game_score' => (int) ($validated['skor'] ?? 0),
-                'game_played_at' => now(),
+                // Ringkasan bisa terkirim lebih dari sekali (kiriman ulang setelah
+                // jaringan pulih), jadi waktu main pertama yang dipertahankan.
+                'game_played_at' => $submission->game_played_at ?: now(),
                 'game_missed' => array_slice($missed, -20),
                 'answer' => $submission->answer ?: $this->ringkasanTeks($benar, $salah, $mission),
                 'submitted_at' => $submission->submitted_at ?: now(),
                 'status' => Submission::STATUS_WAITING,
             ])->save();
 
+            $xpSebelum = (int) $progress->xp;
+
             $xp = $this->gameScores->award($progress, $submission, $benar, $salah);
 
             return response()->json([
                 'ok' => true,
                 'message' => 'Hasil permainan tersimpan.',
+                // Total XP misi ini setelah permainan.
                 'xp' => $xp,
+                // Tambahan XP dari permainan yang BARU SAJA selesai, supaya
+                // anak melihat langsung efek jawabannya di papan hasil.
+                'xp_gain' => max(0, $xp - $xpSebelum),
+                'total_xp' => (int) $progress->team->xp,
                 'benar' => $benar,
                 'salah' => $salah,
             ]);
         }
 
         // Jawaban satu per satu: catat bila salah.
-        if (! $validated['tepat']) {
+        if (! ($validated['tepat'] ?? false)) {
             $missed[] = [
-                'pertanyaan' => $validated['pertanyaan'],
+                'pertanyaan' => $validated['pertanyaan'] ?? '—',
                 'dijawab' => $validated['pilihan'] ?? '—',
             ];
 
@@ -431,8 +491,10 @@ class MissionController extends Controller
 
         $info = $mission->gameInfo();
 
+        // Awalannya memakai konstanta model supaya teks ini dan pemeriksaan
+        // "jawaban masih cuma ringkasan game" tidak pernah berbeda.
         return sprintf(
-            '[Hasil game %s] Jawaban benar %d, salah %d dari %d soal (akurasi %d%%).',
+            Submission::GAME_SUMMARY_PREFIX.' %s] Jawaban benar %d, salah %d dari %d soal (akurasi %d%%).',
             $info['label'] ?? 'arcade',
             $benar,
             $salah,

@@ -266,6 +266,57 @@ class RoundFlowTest extends TestCase
         $response->assertRedirect(route('student.dashboard'));
     }
 
+    public function test_kelompok_terlambat_langsung_bisa_mengikuti_ronde_yang_berjalan(): void
+    {
+        $this->joinTeam('Kelompok A');
+
+        // Guru sudah sampai ronde 3 saat kelompok baru datang.
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/round/start', ['round' => 3]);
+
+        // 1) Lobi masih terkunci: kelompok baru ditolak.
+        $this->flushSession();
+
+        $this->post('/student/join', [
+            'code' => 'TIK8-RONDE',
+            'team_name' => 'Kelompok Telat',
+            'members' => ['Cici'],
+        ])->assertSessionHas('error');
+
+        $this->assertDatabaseMissing('teams', ['name' => 'Kelompok Telat']);
+
+        // 2) Guru membuka lobi: kelompok baru boleh masuk...
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/lobby');
+
+        $this->assertFalse($this->session->fresh()->lobby_locked);
+
+        $this->flushSession();
+
+        $this->post('/student/join', [
+            'code' => 'TIK8-RONDE',
+            'team_name' => 'Kelompok Telat',
+            'members' => ['Cici'],
+        ])->assertRedirect(route('student.dashboard'));
+
+        $team = Team::query()->where('name', 'Kelompok Telat')->firstOrFail();
+        $rondeAktif = Mission::query()->where('order', 3)->firstOrFail();
+
+        // ...DAN langsung bisa mengerjakan ronde yang sedang berjalan, bukan
+        // hanya bisa login lalu mentok di halaman "misi masih terkunci".
+        $progress = TeamProgress::query()
+            ->where('team_id', $team->id)
+            ->where('mission_id', $rondeAktif->id)
+            ->firstOrFail();
+
+        $this->assertFalse(
+            $progress->isLocked(),
+            'Kelompok yang bergabung terlambat harus bisa ikut ronde yang sedang berjalan.'
+        );
+
+        $this->get('/student/mission/'.$rondeAktif->id)->assertOk();
+    }
+
     // -----------------------------------------------------------------
     // ENDPOINT LIVE UNTUK LAYAR PROYEKTOR
     // -----------------------------------------------------------------
@@ -461,6 +512,103 @@ class RoundFlowTest extends TestCase
         $response->assertSee('data-auto-redirect="false"', false);
     }
 
+    // -----------------------------------------------------------------
+    // BERPINDAH RONDE DARI SISI SISWA
+    // -----------------------------------------------------------------
+
+    public function test_halaman_misi_menampilkan_pemilih_ronde_untuk_semua_ronde_terbuka(): void
+    {
+        $this->joinTeam('Kelompok A');
+
+        // Guru membuka ronde 1 dan 3 sekaligus (ronde 2 dilewati).
+        app(RoundService::class)->openRounds($this->session, [1, 3], 10);
+
+        $mission1 = Mission::query()->where('order', 1)->firstOrFail();
+        $mission3 = Mission::query()->where('order', 3)->firstOrFail();
+
+        $response = $this->get('/student/mission/'.$mission1->id);
+
+        $response->assertOk();
+
+        // Bilah pemilih ronde tersedia di halaman ronde, sehingga anak tidak
+        // perlu mencari ke dashboard setiap kali mau berpindah.
+        $response->assertSee('Pindah Ronde');
+
+        // Ronde 3 (yang juga terbuka) bisa diklik dari sini.
+        $response->assertSee(route('student.mission.show', $mission3), false);
+
+        // Ronde yang sedang dibuka ditandai sebagai posisi sekarang.
+        $response->assertSee('SEKARANG DI SINI');
+
+        // Ronde yang masih terkunci tidak boleh muncul sebagai pilihan.
+        $response->assertDontSee('Ronde 2: Misi Ronde 2');
+    }
+
+    public function test_pemilih_ronde_tidak_muncul_sebelum_guru_membuka_ronde(): void
+    {
+        $this->joinTeam('Kelompok A');
+
+        $mission1 = Mission::query()->where('order', 1)->firstOrFail();
+
+        $response = $this->get('/student/mission/'.$mission1->id);
+
+        $response->assertOk();
+
+        // Belum ada ronde berjalan: tidak ada yang bisa dipilih, jadi bilahnya
+        // tidak perlu muncul dan tidak boleh membingungkan anak.
+        $response->assertDontSee('Pindah Ronde');
+    }
+
+    public function test_dashboard_menandai_ronde_yang_sedang_dibuka(): void
+    {
+        $this->joinTeam('Kelompok A');
+
+        app(RoundService::class)->openRounds($this->session, [2], 10);
+
+        $response = $this->get('/student/dashboard');
+
+        $response->assertOk();
+
+        // Kartu misi ronde yang terbuka ditandai, supaya anak tidak menebak
+        // kartu mana yang bisa dikerjakan.
+        $response->assertSee('SEDANG DIBUKA');
+
+        // Bilah pindah ronde juga tersedia di dashboard.
+        $response->assertSee('Pindah Ronde');
+    }
+
+    public function test_pengawas_ronde_memberi_tahu_tanpa_menyeret_siswa_yang_sedang_menulis(): void
+    {
+        $js = file_get_contents(resource_path('js/round-watch.js'));
+
+        // Bilah ronde harus ikut diperbarui saat guru membuka ronde baru,
+        // tanpa perlu me-refresh halaman.
+        $this->assertStringContainsString('syncRoundNav', $js);
+        $this->assertStringContainsString('data-round-nav', $js);
+        $this->assertStringContainsString('open_rounds', $js);
+
+        // Anak yang sedang menulis tidak boleh dipindahkan paksa.
+        $this->assertMatchesRegularExpression('/if \(sedangMenulis\(\)\)/', $js);
+
+        // Ronde yang belum boleh dikerjakan kelompok ini tidak boleh ditarik.
+        $this->assertStringContainsString('if (!data.can_work) return;', $js);
+
+        // Jawaban setengah jadi tidak boleh terkirim sendiri lagi: dulu ini
+        // menyebabkan kiriman bernilai rendah hanya karena guru menekan tombol.
+        $this->assertStringNotContainsString('finishBeforeMoving', $js);
+        $this->assertStringNotContainsString('otomatis terkirim', $js);
+
+        // Halaman misi harus menyediakan banner pemberitahuan yang bisa ditutup.
+        $mission = Mission::query()->where('order', 1)->firstOrFail();
+
+        $this->joinTeam('Kelompok A');
+
+        $response = $this->get('/student/mission/'.$mission->id);
+
+        $response->assertSee('round-banner-title', false);
+        $response->assertSee('data-round-banner-close', false);
+    }
+
     /**
      * Ambil progres kelompok pada ronde tertentu.
      */
@@ -628,6 +776,40 @@ class RoundFlowTest extends TestCase
         $this->assertStringContainsString('Hentikan Ronde', $html);
     }
 
+    public function test_halaman_sesi_menampilkan_tombol_buka_lobi_sebagai_kontrol_utama(): void
+    {
+        $this->joinTeam('Kelompok A');
+
+        // Ronde berjalan = lobi terkunci otomatis. Inilah kondisi yang membuat
+        // siswa terlambat ditolak, jadi guru harus melihat tombolnya langsung.
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/round/start', ['round' => 1]);
+
+        $response = $this->actingAs($this->teacher())
+            ->get('/teacher/sessions/'.$this->session->id);
+
+        $response->assertOk();
+        $response->assertSee('LOBI TERKUNCI');
+        $response->assertSee('Buka Lobi');
+        $response->assertSee(route('teacher.sessions.lobby', $this->session), false);
+
+        $html = $response->getContent();
+
+        $posisiTombol = strpos($html, 'Buka Lobi');
+        $posisiLanjutan = strpos($html, 'Pengaturan lanjutan');
+
+        $this->assertNotFalse($posisiTombol, 'Tombol buka lobi harus ada di halaman sesi.');
+        $this->assertNotFalse($posisiLanjutan, 'Menu pengaturan lanjutan harus tetap ada.');
+
+        // Tombol harus tampil SEBELUM menu pengaturan lanjutan, bukan
+        // tersembunyi di dalamnya (sebab itulah guru tidak menemukannya).
+        $this->assertLessThan(
+            $posisiLanjutan,
+            $posisiTombol,
+            'Tombol buka lobi tidak boleh tersembunyi di dalam menu pengaturan lanjutan.'
+        );
+    }
+
     // -----------------------------------------------------------------
     // BUKA RONDE MANA SAJA (TERMASUK MUNDUR)
     // -----------------------------------------------------------------
@@ -763,9 +945,237 @@ class RoundFlowTest extends TestCase
             ->get('/teacher/sessions/'.$this->session->id);
 
         $response->assertOk();
-        $response->assertSee('Pilih Ronde Langsung');
+
+        // Daftar ronde harus terlihat dan mendukung centang beberapa ronde.
+        $response->assertSee('Pilih Ronde (boleh lebih dari satu)');
+        $response->assertSee('Buka Ronde Terpilih');
+        $response->assertSee('name="rounds[]"', false);
+
         // Harus ada petunjuk bahwa bisa kembali ke ronde sebelumnya.
         $response->assertSee('kembali ke ronde sebelumnya');
+    }
+
+    // -----------------------------------------------------------------
+    // BUKA BEBERAPA RONDE SEKALIGUS
+    // -----------------------------------------------------------------
+
+    public function test_guru_dapat_membuka_beberapa_ronde_sekaligus(): void
+    {
+        $team = $this->joinTeam('Kelompok A');
+
+        $response = $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/rounds/open', [
+                'rounds' => [1, 3],
+                'duration_minutes' => 10,
+            ]);
+
+        $response->assertSessionHas('success');
+
+        $this->session->refresh();
+
+        // Kedua ronde terbuka bersamaan, ronde terdepan = 3.
+        $this->assertSame([1, 3], $this->session->openRoundNumbers());
+        $this->assertSame(3, $this->session->current_round);
+        $this->assertSame(GameSession::ROUND_RUNNING, $this->session->round_status);
+        $this->assertTrue($this->session->hasMultipleOpenRounds());
+
+        // Keduanya bisa dikerjakan, ronde yang tidak dipilih justru dikunci.
+        $this->assertSame(TeamProgress::STATUS_AVAILABLE, $this->progressFor($team, 1)->status);
+        $this->assertSame(TeamProgress::STATUS_AVAILABLE, $this->progressFor($team, 3)->status);
+        $this->assertSame(TeamProgress::STATUS_LOCKED, $this->progressFor($team, 2)->status);
+    }
+
+    public function test_beberapa_ronde_terbuka_mematikan_timer_ronde(): void
+    {
+        $this->joinTeam('Kelompok A');
+
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/rounds/open', [
+                'rounds' => [1, 3],
+                'duration_minutes' => 10,
+            ]);
+
+        $this->session->refresh();
+
+        // Tanpa hitung mundur bersama: tiap kelompok bekerja dengan tempo sendiri.
+        $this->assertNull($this->session->roundSecondsRemaining());
+        $this->assertNull($this->session->formattedRoundRemaining());
+        $this->assertFalse($this->session->isRoundTimeUp());
+        $this->assertTrue($this->session->isRoundRunning());
+
+        // Kembali ke satu ronde: timer hidup lagi.
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/rounds/open', [
+                'rounds' => [3],
+                'duration_minutes' => 10,
+            ]);
+
+        $this->session->refresh();
+
+        $this->assertFalse($this->session->hasMultipleOpenRounds());
+        $this->assertNotNull($this->session->roundSecondsRemaining());
+    }
+
+    public function test_mengubah_pilihan_ronde_menutup_ronde_yang_dilepas(): void
+    {
+        $team = $this->joinTeam('Kelompok A');
+
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/rounds/open', ['rounds' => [1, 2, 3]]);
+
+        $this->assertSame([1, 2, 3], $this->session->fresh()->openRoundNumbers());
+
+        // Lepas ronde 1 dan 3 dari centang.
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/rounds/open', ['rounds' => [2]]);
+
+        $this->assertSame([2], $this->session->fresh()->openRoundNumbers());
+        $this->assertSame(TeamProgress::STATUS_AVAILABLE, $this->progressFor($team, 2)->status);
+        $this->assertSame(TeamProgress::STATUS_LOCKED, $this->progressFor($team, 1)->status);
+        $this->assertSame(TeamProgress::STATUS_LOCKED, $this->progressFor($team, 3)->status);
+    }
+
+    public function test_buka_beberapa_ronde_menolak_nomor_yang_tidak_ada(): void
+    {
+        $this->joinTeam('Kelompok A');
+
+        $response = $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/rounds/open', ['rounds' => [1, 99]]);
+
+        $response->assertSessionHas('error');
+
+        // Satu nomor salah membatalkan seluruh permintaan.
+        $this->assertSame([], $this->session->fresh()->openRoundNumbers());
+    }
+
+    public function test_buka_beberapa_ronde_butuh_minimal_satu_pilihan(): void
+    {
+        $this->joinTeam('Kelompok A');
+
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/rounds/open', ['rounds' => []])
+            ->assertSessionHasErrors('rounds');
+
+        $this->assertSame([], $this->session->fresh()->openRoundNumbers());
+    }
+
+    public function test_guru_dapat_menutup_semua_ronde_sekaligus(): void
+    {
+        $team = $this->joinTeam('Kelompok A');
+
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/rounds/open', ['rounds' => [1, 3]]);
+
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/rounds/close')
+            ->assertSessionHas('success');
+
+        $this->session->refresh();
+
+        $this->assertSame([], $this->session->openRoundNumbers());
+        $this->assertSame(GameSession::ROUND_ENDED, $this->session->round_status);
+        $this->assertSame(TeamProgress::STATUS_LOCKED, $this->progressFor($team, 1)->status);
+        $this->assertSame(TeamProgress::STATUS_LOCKED, $this->progressFor($team, 3)->status);
+    }
+
+    public function test_halaman_sesi_menampilkan_ronde_yang_sedang_terbuka(): void
+    {
+        $this->joinTeam('Kelompok A');
+
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/rounds/open', ['rounds' => [1, 3]]);
+
+        $response = $this->actingAs($this->teacher())
+            ->get('/teacher/sessions/'.$this->session->id);
+
+        $response->assertOk();
+        $response->assertSee('TERBUKA: 1, 3');
+        $response->assertSee('hitung mundur ronde dimatikan');
+
+        // Kotak centang ronde 1 dan 3 harus tercentang, ronde 2 tidak.
+        $html = $response->getContent();
+
+        $this->assertMatchesRegularExpression('/name="rounds\[\]"\s+value="1"\s+checked/', $html);
+        $this->assertMatchesRegularExpression('/name="rounds\[\]"\s+value="3"\s+checked/', $html);
+        $this->assertDoesNotMatchRegularExpression('/name="rounds\[\]"\s+value="2"\s+checked/', $html);
+    }
+
+    public function test_layar_proyektor_menyediakan_daftar_ronde_terbuka(): void
+    {
+        $this->joinTeam('Kelompok A');
+
+        $response = $this->actingAs($this->teacher())
+            ->get('/teacher/sessions/'.$this->session->id.'/screen');
+
+        $response->assertOk();
+        $response->assertSee('id="scr-open-rounds"', false);
+        $response->assertSee('Ronde yang sedang terbuka');
+        $response->assertSee('id="scr-timer-note"', false);
+    }
+
+    public function test_status_ronde_siswa_mematikan_auto_pindah_saat_banyak_ronde_terbuka(): void
+    {
+        $this->joinTeam('Kelompok A');
+
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/rounds/open', ['rounds' => [1, 3]]);
+
+        $response = $this->getJson('/student/round-status');
+
+        $response->assertOk();
+        $response->assertJsonPath('auto_switch', false);
+        $response->assertJsonPath('can_work', true);
+        $response->assertJsonCount(2, 'open_rounds');
+        $response->assertJsonPath('open_rounds.0.order', 1);
+        $response->assertJsonPath('open_rounds.1.order', 3);
+
+        // Satu ronde saja = auto-pindah tetap aktif seperti semula.
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/rounds/open', ['rounds' => [3]]);
+
+        $this->getJson('/student/round-status')->assertJsonPath('auto_switch', true);
+    }
+
+    public function test_endpoint_live_menyertakan_ronde_terbuka_dan_status_timer(): void
+    {
+        $this->joinTeam('Kelompok A');
+
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/rounds/open', ['rounds' => [1, 3]]);
+
+        $response = $this->actingAs($this->teacher())
+            ->getJson('/teacher/sessions/'.$this->session->id.'/live');
+
+        $response->assertOk();
+        $response->assertJsonPath('round.timer_active', false);
+        $response->assertJsonCount(2, 'round.open_rounds');
+        $response->assertJsonPath('round.open_rounds.0.order', 1);
+        $response->assertJsonPath('round.open_rounds.1.title', 'Misi Ronde 3');
+    }
+
+    public function test_kelompok_terlambat_mendapat_semua_ronde_yang_terbuka(): void
+    {
+        $this->joinTeam('Kelompok A');
+
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/rounds/open', ['rounds' => [1, 3]]);
+
+        // Guru membuka lobi supaya murid yang datang terlambat bisa masuk.
+        $this->actingAs($this->teacher())
+            ->post('/teacher/sessions/'.$this->session->id.'/lobby');
+
+        $this->flushSession();
+
+        $this->post('/student/join', [
+            'code' => 'TIK8-RONDE',
+            'team_name' => 'Kelompok Telat',
+            'members' => ['Cici'],
+        ])->assertRedirect(route('student.dashboard'));
+
+        $team = Team::query()->where('name', 'Kelompok Telat')->firstOrFail();
+
+        $this->assertSame(TeamProgress::STATUS_AVAILABLE, $this->progressFor($team, 1)->status);
+        $this->assertSame(TeamProgress::STATUS_AVAILABLE, $this->progressFor($team, 3)->status);
     }
 
     public function test_daftar_ronde_menandai_ronde_yang_sedang_dibuka(): void

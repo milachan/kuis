@@ -76,7 +76,7 @@
                   rows="10"
                   class="input-field resize-y"
                   required
-                  placeholder="Tulis jawabanmu berurutan sesuai nomor soal, misalnya:&#10;1. ...&#10;2. ...">{{ old('answer', $submission->answer ?? '') }}</textarea>
+                  placeholder="Tulis jawabanmu berurutan sesuai nomor soal, misalnya:&#10;1. ...&#10;2. ...">{{ old('answer', $submission?->essayAnswer() ?? '') }}</textarea>
 
         <div class="mt-1 flex flex-wrap items-center justify-between gap-2">
             <p class="text-xs font-semibold text-ink-600">

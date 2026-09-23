@@ -62,7 +62,6 @@ class TeamController extends Controller
 
         $missionList = Mission::query()->active()->ordered()->get();
         $progress = $team->progress()->get()->keyBy('mission_id');
-        $codes = $this->missions->codesForSession($team->gameSession);
 
         $submissions = $team->submissions()
             ->with('mission')
@@ -70,7 +69,7 @@ class TeamController extends Controller
             ->keyBy('mission_id');
 
         return view('teacher.teams.show', compact(
-            'team', 'missionList', 'progress', 'submissions', 'codes'
+            'team', 'missionList', 'progress', 'submissions'
         ));
     }
 

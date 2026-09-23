@@ -59,7 +59,6 @@ class ResetDemo extends Command
         $this->line('  Kode sesi        : '.$session->code);
         $this->line('  Kelompok dihapus : '.$teamCount);
         $this->line('  Timer            : '.$session->duration_minutes.' menit (mulai ulang)');
-        $this->line('  Kode rahasia     : tetap tersimpan');
 
         return self::SUCCESS;
     }
@@ -86,7 +85,6 @@ class ResetDemo extends Command
             Submission::query()->delete();
 
             GameSession::query()->each(function (GameSession $session) {
-                $session->missionCodes()->delete();
                 $session->delete();
             });
         });

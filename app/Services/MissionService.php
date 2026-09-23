@@ -4,15 +4,13 @@ namespace App\Services;
 
 use App\Models\GameSession;
 use App\Models\Mission;
-use App\Models\MissionCode;
 use App\Models\Team;
 use App\Models\TeamProgress;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 /**
- * Semua logika misi: inisialisasi progres, kunci/buka misi, dan kode rahasia.
+ * Semua logika misi: inisialisasi progres, kunci/buka misi.
  */
 class MissionService
 {
@@ -102,6 +100,65 @@ class MissionService
     }
 
     /**
+     * Daftar ronde yang sedang TERBUKA untuk sebuah kelompok.
+     *
+     * Kelompok sering bingung harus ke mana setelah satu ronde selesai: kartu
+     * misi bercampur dengan ronde yang masih terkunci, dan halaman ronde tidak
+     * punya tombol pindah sama sekali. Method ini mengumpulkan SATU daftar ronde
+     * yang benar-benar bisa dikerjakan sekarang, supaya halaman mana pun bisa
+     * menampilkan pemilih ronde yang sama.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function roundChoices(Team $team): Collection
+    {
+        $session = $team->gameSession;
+
+        if (! $session) {
+            return collect();
+        }
+
+        $orders = $session->openRoundNumbers();
+
+        if ($orders === []) {
+            return collect();
+        }
+
+        $missions = Mission::query()
+            ->active()
+            ->ordered()
+            ->whereIn('order', $orders)
+            ->get();
+
+        if ($missions->isEmpty()) {
+            return collect();
+        }
+
+        $progress = TeamProgress::query()
+            ->where('team_id', $team->id)
+            ->whereIn('mission_id', $missions->pluck('id'))
+            ->get()
+            ->keyBy('mission_id');
+
+        return $missions->map(function (Mission $mission) use ($progress) {
+            /** @var TeamProgress|null $row */
+            $row = $progress->get($mission->id);
+
+            return [
+                'id' => $mission->id,
+                'order' => (int) $mission->order,
+                'title' => $mission->title,
+                'url' => route('student.mission.show', $mission),
+                'is_game' => $mission->hasGame(),
+                'is_locked' => $row === null || $row->isLocked(),
+                'is_done' => $row !== null && $row->isCompleted(),
+                'is_submitted' => $row !== null
+                    && $row->status === TeamProgress::STATUS_WAITING_VALIDATION,
+            ];
+        })->values();
+    }
+
+    /**
      * Tandai misi sebagai SEDANG DIKERJAKAN saat siswa membukanya.
      *
      * Sekaligus mencatat waktu mulai kerja siswa (hanya sekali). Waktu ini
@@ -160,11 +217,16 @@ class MissionService
     /**
      * Buka satu misi secara manual oleh guru.
      *
-     * Bila ronde untuk misi ini sudah berjalan lebih dulu (murid masuk
+     * Bila misi ini baru dibuka SETELAH sesi melewati rondenya (murid masuk
      * terlambat), misi ditandai `late_entry` supaya tidak ikut dikunci saat
-     * guru berpindah ke ronde berikutnya.
+     * guru berpindah ronde.
+     *
+     * @param  bool|null  $lateEntry  Paksa penanda pendatang baru. Dipakai guru
+     *                                saat membuka banyak ronde sekaligus: ronde
+     *                                yang memang dipilih guru BUKAN pendatang
+     *                                baru, jadi tidak boleh kebal dari penguncian.
      */
-    public function unlockManually(Team $team, Mission $mission): void
+    public function unlockManually(Team $team, Mission $mission, ?bool $lateEntry = null): void
     {
         $progress = TeamProgress::query()->firstOrCreate(
             ['team_id' => $team->id, 'mission_id' => $mission->id],
@@ -174,7 +236,8 @@ class MissionService
         // Tentukan apakah ini pendatang baru: misi dibukakan setelah ronde
         // misi tersebut sudah lewat dari ronde aktif sesi.
         $session = $team->gameSession;
-        $isLateEntry = $session !== null
+        $otomatis = $lateEntry === null
+            && $session !== null
             && $session->current_round > 0
             && $mission->order < $session->current_round;
 
@@ -184,16 +247,44 @@ class MissionService
                 'unlocked_at' => now(),
                 // Timer kerja siswa baru mulai saat dia membuka halamannya.
                 'work_started_at' => null,
-                'late_entry' => $isLateEntry,
+                'late_entry' => $lateEntry ?? $otomatis,
             ]);
 
             return;
         }
 
-        // Misi sudah terbuka sebelumnya: perbarui penanda pendatang baru bila
-        // kelompok ini baru bergabung setelah ronde berjalan.
-        if ($isLateEntry && ! $progress->late_entry) {
+        // Misi sudah terbuka sebelumnya: penanda pendatang baru hanya dinaikkan
+        // bila ditentukan otomatis, bukan saat guru sendiri memilih ronde ini.
+        if ($otomatis && ! $progress->late_entry) {
             $progress->update(['late_entry' => true]);
+        }
+    }
+
+    /**
+     * Buka SEMUA ronde yang sedang terbuka untuk sebuah kelompok.
+     *
+     * Dipakai kelompok yang baru bergabung di tengah permainan (guru sudah
+     * membuka lobi). Tanpa ini mereka bisa masuk, tetapi mentok di halaman
+     * "misi masih terkunci" karena ronde aktif sudah dibuka sebelum mereka ada.
+     *
+     * Bila guru membuka beberapa ronde sekaligus, semuanya ikut dibuka supaya
+     * kelompok baru bisa memilih ronde yang sama dengan teman sekelasnya.
+     */
+    public function openActiveRounds(Team $team, GameSession $session): void
+    {
+        $orders = $session->openRoundNumbers();
+
+        if ($orders === []) {
+            return;
+        }
+
+        $missions = Mission::query()
+            ->active()
+            ->whereIn('order', $orders)
+            ->get();
+
+        foreach ($missions as $mission) {
+            $this->unlockManually($team, $mission);
         }
     }
 
@@ -213,80 +304,5 @@ class MissionService
                 'unlocked_at' => null,
             ]);
         }
-    }
-
-    /**
-     * Cek kode rahasia untuk sebuah misi dalam sebuah sesi.
-     * Mengembalikan true jika cocok.
-     */
-    public function verifyCode(GameSession $session, Mission $mission, string $input): bool
-    {
-        $code = MissionCode::query()
-            ->where('game_session_id', $session->id)
-            ->where('mission_id', $mission->id)
-            ->first();
-
-        if (! $code) {
-            return false;
-        }
-
-        return $code->matches($input);
-    }
-
-    /**
-     * Buat kode rahasia default untuk semua misi dalam sebuah sesi
-     * (dipakai saat guru membuat sesi baru).
-     */
-    public function generateCodes(GameSession $session): void
-    {
-        $missions = Mission::query()->active()->ordered()->get();
-
-        // Kode default yang mudah diingat guru; dapat diubah saat membuat sesi.
-        $defaults = [
-            1 => 'FORMAT',
-            2 => 'CLIP',
-            3 => 'SNIP',
-            4 => 'REPORT',
-            5 => 'DIGITAL',
-        ];
-
-        foreach ($missions as $mission) {
-            MissionCode::query()->updateOrCreate(
-                [
-                    'game_session_id' => $session->id,
-                    'mission_id' => $mission->id,
-                ],
-                [
-                    'code' => $defaults[$mission->order]
-                        ?? strtoupper(Str::random(6)),
-                ]
-            );
-        }
-    }
-
-    /**
-     * Simpan/ubah kode rahasia satu misi dalam satu sesi.
-     */
-    public function setCode(GameSession $session, Mission $mission, string $code): void
-    {
-        MissionCode::query()->updateOrCreate(
-            [
-                'game_session_id' => $session->id,
-                'mission_id' => $mission->id,
-            ],
-            ['code' => strtoupper(trim($code))]
-        );
-    }
-
-    /**
-     * Ambil peta kode rahasia per misi untuk halaman guru.
-     *
-     * @return Collection<int, string>
-     */
-    public function codesForSession(GameSession $session): Collection
-    {
-        return MissionCode::query()
-            ->where('game_session_id', $session->id)
-            ->pluck('code', 'mission_id');
     }
 }

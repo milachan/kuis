@@ -89,7 +89,35 @@
                     <span class="badge {{ $session->lobby_locked ? 'bg-amber-500/15 text-amber-200' : 'bg-emerald-500/15 text-emerald-200' }}">
                         {{ $session->lobby_locked ? '🔒 LOBI TERKUNCI' : '🔓 LOBI TERBUKA' }}
                     </span>
+
+                    {{--
+                        Kontrol lobi sengaja ditempatkan di sini (bukan lagi di dalam
+                        menu "Pengaturan lanjutan") karena inilah tombol yang dipakai
+                        guru ketika ada siswa datang terlambat. Sebelumnya tombol ini
+                        tersembunyi, sehingga guru hanya melihat status "terkunci"
+                        tanpa cara membukanya.
+                    --}}
+                    @unless ($session->isEnded())
+                        <form method="POST" action="{{ route('teacher.sessions.lobby', $session) }}">
+                            @csrf
+                            <button type="submit"
+                                    class="{{ $session->lobby_locked ? 'btn-primary' : 'btn-secondary' }} text-xs">
+                                {{ $session->lobby_locked
+                                    ? '🔓 Buka Lobi (izinkan siswa terlambat masuk)'
+                                    : '🔒 Kunci Lobi' }}
+                            </button>
+                        </form>
+                    @endunless
                 </div>
+
+                @if ($session->lobby_locked && ! $session->isEnded())
+                    <p class="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] leading-relaxed text-amber-200/90">
+                        Lobi terkunci otomatis setiap kali ronde dibuka. Selama terkunci, siswa yang
+                        datang terlambat <strong>tidak bisa bergabung</strong>. Tekan
+                        <strong>Buka Lobi</strong> di atas agar mereka bisa masuk dan langsung ikut
+                        ronde yang sedang berjalan.
+                    </p>
+                @endif
             </div>
         </div>
     </div>
@@ -134,8 +162,10 @@
                     <div class="mt-3 rounded-2xl border-2 border-cyan-accent/40 bg-cyan-strong/5 p-4">
                         <p class="text-xs text-white/60">
                             @if ($currentRound > 0)
-                                Ronde {{ $currentRound }} sedang berjalan. Menekan tombol ini akan
-                                menutupnya dan membuka ronde berikutnya.
+                                Ronde terdepan sekarang {{ $currentRound }}. Tombol ini membuka
+                                <strong class="text-white/80">satu</strong> ronde berikutnya dan menutup
+                                ronde lain yang sedang terbuka. Untuk membuka beberapa ronde sekaligus,
+                                pakai pilihan ronde di bawah.
                             @else
                                 Tekan tombol ini untuk memulai ronde pertama.
                             @endif
@@ -179,79 +209,112 @@
                 @endif
 
                 {{-- ---------------------------------------------------------------
-                    Daftar ronde: guru bisa memilih ronde mana saja, termasuk
-                    MUNDUR ke ronde sebelumnya. Berguna bila salah tekan atau
-                    ingin mengulang ronde tertentu. XP tetap aman.
+                    Daftar ronde: guru boleh mencentang BEBERAPA ronde sekaligus
+                    supaya semuanya terbuka bersamaan. Ronde yang tidak dicentang
+                    ditutup otomatis, jadi cara ini juga bisa dipakai untuk MUNDUR
+                    ke ronde sebelumnya. XP tetap aman.
                 ---------------------------------------------------------------- --}}
                 @if (! $session->isEnded())
+                    @php
+                        $rondeTerbuka = $session->openRoundNumbers();
+                    @endphp
+
                     <div class="mt-4 rounded-2xl border border-white/10 bg-navy-900/40 p-4">
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                            <div>
+                        <div class="flex flex-wrap items-start justify-between gap-2">
+                            <div class="min-w-0">
                                 <h3 class="text-xs font-bold uppercase tracking-wider text-white/70">
-                                    Pilih Ronde Langsung
+                                    Pilih Ronde (boleh lebih dari satu)
                                 </h3>
                                 <p class="mt-0.5 text-[11px] text-white/45">
-                                    Klik ronde mana saja untuk membukanya. Bisa dipakai untuk
-                                    <strong class="text-white/70">kembali ke ronde sebelumnya</strong>.
+                                    Centang ronde mana saja yang harus terbuka, lalu tekan
+                                    <strong class="text-white/70">Buka Ronde Terpilih</strong>.
+                                    Ronde yang tidak dicentang ditutup otomatis — cara ini juga bisa
+                                    dipakai untuk <strong class="text-white/70">kembali ke ronde sebelumnya</strong>.
                                     XP yang sudah terkumpul tidak terhapus.
                                 </p>
                             </div>
+
+                            <span class="badge {{ count($rondeTerbuka) > 0 ? 'bg-cyan-accent/20 text-cyan-accent' : 'bg-white/5 text-white/50' }}">
+                                @if (count($rondeTerbuka) > 0)
+                                    TERBUKA: {{ implode(', ', $rondeTerbuka) }}
+                                @else
+                                    BELUM ADA RONDE TERBUKA
+                                @endif
+                            </span>
                         </div>
 
-                        <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                            @foreach ($missionList as $m)
-                                @php
-                                    $rondeIni = $m->order;
-                                    $sedangDibuka = $rondeIni === $currentRound;
-                                    $sudahLewat = $rondeIni < $currentRound;
-                                @endphp
+                        @if (count($rondeTerbuka) > 1)
+                            <p class="mt-2 rounded-xl border border-gold/30 bg-gold/10 p-2.5 text-[11px] leading-relaxed text-gold">
+                                {{ count($rondeTerbuka) }} ronde terbuka bersamaan: kelompok bebas memilih
+                                mau mengerjakan yang mana, dan <strong>hitung mundur ronde dimatikan</strong>
+                                (batas waktu per kelompok tetap berlaku).
+                            </p>
+                        @endif
 
-                                @if ($sedangDibuka)
-                                    {{-- Ronde yang sedang berjalan: tombol mati + penanda --}}
-                                    <div class="rounded-xl border-2 border-cyan-accent/50 bg-cyan-strong/10 p-2.5">
-                                        <div class="flex items-center justify-between gap-1">
-                                            <span class="text-[11px] font-black text-cyan-accent">
-                                                RONDE {{ $rondeIni }}
-                                            </span>
-                                            <span class="badge bg-cyan-accent/20 text-cyan-accent text-[10px]">
-                                                SEDANG DIBUKA
-                                            </span>
-                                        </div>
-                                        <p class="mt-1 line-clamp-2 text-[11px] leading-snug text-white/70">
-                                            {{ $m->title }}
-                                        </p>
-                                    </div>
-                                @else
-                                    <form method="POST"
-                                          action="{{ route('teacher.sessions.round.open', $session) }}">
-                                        @csrf
-                                        <input type="hidden" name="round" value="{{ $rondeIni }}">
-                                        <input type="hidden" name="duration_minutes"
-                                               value="{{ $session->round_duration_minutes }}">
-                                        <button type="submit"
-                                                class="w-full rounded-xl border border-white/15 bg-navy-900/60 p-2.5 text-left transition hover:border-cyan-accent/50 hover:bg-cyan-strong/10">
-                                            <div class="flex items-center justify-between gap-1">
-                                                <span class="text-[11px] font-black text-white/60">
+                        <form method="POST"
+                              action="{{ route('teacher.sessions.rounds.open', $session) }}"
+                              class="mt-3">
+                            @csrf
+                            <input type="hidden" name="duration_minutes"
+                                   value="{{ $session->round_duration_minutes }}">
+
+                            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                                @foreach ($missionList as $m)
+                                    @php
+                                        $rondeIni = $m->order;
+                                        $terbuka = in_array($rondeIni, $rondeTerbuka, true);
+                                        $sudahLewat = $rondeIni < $currentRound;
+                                    @endphp
+
+                                    <label class="flex cursor-pointer flex-col rounded-xl border p-2.5 transition
+                                                  {{ $terbuka
+                                                        ? 'border-cyan-accent/50 bg-cyan-strong/10'
+                                                        : 'border-white/15 bg-navy-900/60 hover:border-cyan-accent/40' }}">
+                                        <span class="flex items-center justify-between gap-1">
+                                            <span class="flex items-center gap-1.5">
+                                                <input type="checkbox"
+                                                       name="rounds[]"
+                                                       value="{{ $rondeIni }}"
+                                                       @checked($terbuka)
+                                                       class="h-3.5 w-3.5 accent-cyan-400">
+                                                <span class="text-[11px] font-black {{ $terbuka ? 'text-cyan-accent' : 'text-white/60' }}">
                                                     RONDE {{ $rondeIni }}
                                                 </span>
-                                                <span class="text-[10px] font-bold
-                                                    {{ $sudahLewat ? 'text-white/35' : 'text-emerald-300/80' }}">
-                                                    {{ $sudahLewat ? 'BUKA ULANG' : 'BUKA' }}
+                                            </span>
+
+                                            @if ($terbuka)
+                                                <span class="badge bg-cyan-accent/20 text-cyan-accent text-[10px]">
+                                                    SEDANG DIBUKA
                                                 </span>
-                                            </div>
-                                            <p class="mt-1 line-clamp-2 text-[11px] leading-snug text-white/60">
-                                                {{ $m->title }}
-                                            </p>
-                                            @if ($m->hasGame())
-                                                <span class="mt-1 inline-block text-[10px] text-grape-400">
-                                                    {{ $m->gameInfo()['icon'] }} {{ $m->gameInfo()['label'] }}
-                                                </span>
+                                            @elseif ($sudahLewat)
+                                                <span class="text-[10px] font-bold text-white/35">BUKA ULANG</span>
+                                            @else
+                                                <span class="text-[10px] font-bold text-emerald-300/80">BUKA</span>
                                             @endif
-                                        </button>
-                                    </form>
-                                @endif
-                            @endforeach
-                        </div>
+                                        </span>
+
+                                        <span class="mt-1 line-clamp-2 text-[11px] leading-snug {{ $terbuka ? 'text-white/75' : 'text-white/60' }}">
+                                            {{ $m->title }}
+                                        </span>
+
+                                        @if ($m->hasGame())
+                                            <span class="mt-1 inline-block text-[10px] text-grape-400">
+                                                {{ $m->gameInfo()['icon'] }} {{ $m->gameInfo()['label'] }}
+                                            </span>
+                                        @endif
+                                    </label>
+                                @endforeach
+                            </div>
+
+                            <div class="mt-3 flex flex-wrap items-center gap-3">
+                                <button type="submit" class="btn-primary text-xs">
+                                    ▶ Buka Ronde Terpilih
+                                </button>
+                                <span class="text-[11px] text-white/45">
+                                    Boleh centang beberapa ronde sekaligus.
+                                </span>
+                            </div>
+                        </form>
                     </div>
                 @endif
 
@@ -279,6 +342,71 @@
                 </div>
 
                 {{-- ---------------------------------------------------------------
+                    Jam kelas. Dulu waktu ini dihitung sejak sesi DIBUAT, sehingga
+                    sering habis saat kelas masih mengerjakan — dan semua kiriman
+                    langsung ditolak tanpa tombol apapun untuk memperpanjangnya.
+                    Sekarang jam mulai saat ronde pertama dibuka, dan guru punya
+                    tombol tambah waktu / tanpa batas.
+                ---------------------------------------------------------------- --}}
+                <div class="mt-4 rounded-2xl border p-4
+                            {{ $session->isTimeUp() ? 'border-rose-400/40 bg-rose-500/10' : 'border-white/10 bg-navy-900/40' }}">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-white/70">
+                                ⏱ Jam Kelas
+                            </h3>
+                            <p class="mt-1 text-2xl font-black {{ $session->isTimeUp() ? 'text-rose-300' : 'text-white' }}">
+                                @if (! $session->hasTimer())
+                                    Tanpa batas waktu
+                                @elseif (! $session->timeLimitActive())
+                                    Belum dimulai
+                                @else
+                                    {{ $session->formattedRemaining() }}
+                                @endif
+                            </p>
+                            <p class="mt-1 max-w-xl text-[11px] leading-relaxed text-white/50">
+                                Jam kelas mulai berjalan saat ronde pertama dibuka, bukan saat sesi dibuat.
+                                Kelompok yang baru mulai mengerjakan ronde setelah jam ini habis tetap bisa
+                                bekerja — mereka memakai jatah waktu ronde sendiri.
+                            </p>
+                        </div>
+
+                        <div class="flex flex-wrap gap-2">
+                            @if ($session->hasTimer())
+                                <form method="POST" action="{{ route('teacher.sessions.time.extend', $session) }}">
+                                    @csrf
+                                    <button type="submit" class="btn-secondary text-xs">
+                                        ⏱ Tambah 15 Menit
+                                    </button>
+                                </form>
+
+                                <form method="POST"
+                                      action="{{ route('teacher.sessions.time.unlimited', $session) }}"
+                                      data-confirm="Matikan batas waktu sesi? Semua kelompok bisa mengirim jawaban sampai sesi diakhiri.">
+                                    @csrf
+                                    <button type="submit" class="btn-secondary text-xs">
+                                        ♾️ Tanpa Batas Waktu
+                                    </button>
+                                </form>
+                            @else
+                                <a href="{{ route('teacher.sessions.edit', $session) }}" class="btn-secondary text-xs">
+                                    ⏱ Pakai Batas Waktu
+                                </a>
+                            @endif
+                        </div>
+                    </div>
+
+                    @if ($session->isTimeUp())
+                        <p class="mt-3 rounded-xl border border-rose-400/30 bg-rose-500/10 p-2.5 text-[11px] leading-relaxed text-rose-200">
+                            Jam kelas sudah habis. Kelompok yang mengerjakan rondenya SEBELUM jam ini
+                            habis tidak bisa mengirim lagi — tekan
+                            <strong>Tambah 15 Menit</strong> atau <strong>Tanpa Batas Waktu</strong>
+                            supaya mereka bisa melanjutkan.
+                        </p>
+                    @endif
+                </div>
+
+                {{-- ---------------------------------------------------------------
                     Kendali lanjutan: DISEMBUNYIKAN supaya guru tidak salah klik
                     saat mengajar. Dibuka hanya bila benar-benar diperlukan.
                 ---------------------------------------------------------------- --}}
@@ -298,10 +426,12 @@
                                 </form>
                             @endif
 
-                            <form method="POST" action="{{ route('teacher.sessions.lobby', $session) }}">
+                            <form method="POST"
+                                  action="{{ route('teacher.sessions.rounds.close', $session) }}"
+                                  data-confirm="Tutup semua ronde yang terbuka? Siswa tidak bisa mengirim jawaban sampai ronde dibuka lagi. Ketikan siswa tetap tersimpan di browser mereka.">
                                 @csrf
                                 <button type="submit" class="btn-secondary text-xs">
-                                    {{ $session->lobby_locked ? '🔓 Izinkan Siswa Baru Masuk' : '🔒 Stop Siswa Baru Masuk' }}
+                                    ⏹ Tutup Semua Ronde
                                 </button>
                             </form>
 
@@ -317,7 +447,9 @@
 
                         <p class="text-[11px] leading-relaxed text-white/40">
                             "Hentikan Ronde" dipakai bila ingin menghentikan ronde tanpa membuka ronde
-                            berikutnya (mis. waktu habis). Untuk lanjut bermain, gunakan tombol
+                            berikutnya (mis. waktu habis) — misi tetap bisa dikerjakan siswa.
+                            "Tutup Semua Ronde" sekaligus menutup misi yang sedang terbuka, sehingga
+                            siswa berhenti mengirim jawaban. Untuk lanjut bermain, gunakan tombol
                             <strong class="text-white/60">Buka Ronde</strong> di atas.
                         </p>
                     </div>
@@ -404,38 +536,6 @@
                         Kotak bernomor = ronde. Hijau = selesai, biru = sedang dikerjakan, abu = terkunci.
                     </p>
                 @endif
-            </div>
-        </div>
-    </div>
-
-    {{-- ===================== LANGKAH 4: KODE RAHASIA ===================== --}}
-    <div class="panel mb-4 border-gold/25 p-5">
-        <div class="flex flex-wrap items-start gap-4">
-            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gold/20 text-base font-black text-gold">4</span>
-            <div class="min-w-0 flex-1">
-                <h2 class="text-sm font-bold uppercase tracking-wider text-gold">Kode Rahasia Tiap Ronde</h2>
-                <p class="mt-1 text-xs text-white/60">
-                    Bacakan kode ini kepada siswa saat ronde berjalan. Hanya guru yang melihat
-                    halaman ini — kode tidak pernah dikirim ke halaman siswa.
-                </p>
-
-                <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    @foreach ($missionList as $mission)
-                        <div class="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-navy-900/50 px-3 py-2">
-                            <div class="min-w-0">
-                                <p class="truncate text-xs text-white/70">R{{ $mission->order }}. {{ $mission->title }}</p>
-                                @if ($mission->hasGame())
-                                    <p class="text-[10px] text-grape-400">
-                                        {{ $mission->gameInfo()['icon'] }} {{ $mission->gameInfo()['label'] }}
-                                    </p>
-                                @endif
-                            </div>
-                            <span class="shrink-0 font-mono text-sm font-bold text-gold">
-                                {{ $codes[$mission->id] ?? '—' }}
-                            </span>
-                        </div>
-                    @endforeach
-                </div>
             </div>
         </div>
     </div>

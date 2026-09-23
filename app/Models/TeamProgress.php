@@ -131,4 +131,21 @@ class TeamProgress extends Model
 
         return $remaining !== null && $remaining === 0;
     }
+
+    /**
+     * Apakah jatah waktu kelompok ini baru mulai berjalan setelah batas waktu
+     * kelas lewat (mis. murid yang baru masuk karena terlambat)?
+     *
+     * Kalau ya, jam kelas yang sudah habis TIDAK boleh memblokir mereka:
+     * mereka memakai jatah waktu ronde miliknya sendiri.
+     */
+    public function isFreshWorkWindow(?Carbon $classDeadline): bool
+    {
+        if ($classDeadline === null) {
+            return true;
+        }
+
+        return $this->work_started_at === null
+            || $this->work_started_at->greaterThanOrEqualTo($classDeadline);
+    }
 }

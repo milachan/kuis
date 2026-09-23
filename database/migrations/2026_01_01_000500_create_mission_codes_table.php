@@ -7,8 +7,11 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Kode rahasia tiap misi, dibuat per sesi agar siswa tidak mudah menyontek.
-     * Kode ini TIDAK pernah dikirim ke halaman siswa.
+     * [Dihapus] Tabel kode rahasia per sesi.
+     *
+     * Fitur ini dibuang lewat migrasi
+     * 2026_01_01_001800_drop_mission_codes_and_code_prompt.
+     * Migrasi ini dipertahankan agar riwayat database tetap utuh.
      */
     public function up(): void
     {

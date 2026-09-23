@@ -103,8 +103,16 @@ Route::prefix('teacher')->name('teacher.')->middleware(['auth', 'teacher'])->gro
     Route::post('/sessions/{session}/round/next', [RoundController::class, 'next'])->name('sessions.round.next');
     // Buka ronde tertentu (bisa mundur ke ronde sebelumnya).
     Route::post('/sessions/{session}/round/open', [RoundController::class, 'openRound'])->name('sessions.round.open');
+    // Buka BEBERAPA ronde sekaligus (guru mencentang ronde mana saja).
+    Route::post('/sessions/{session}/rounds/open', [RoundController::class, 'openRounds'])->name('sessions.rounds.open');
+    // Tutup semua ronde yang sedang terbuka.
+    Route::post('/sessions/{session}/rounds/close', [RoundController::class, 'closeRounds'])->name('sessions.rounds.close');
     Route::post('/sessions/{session}/round/start', [RoundController::class, 'start'])->name('sessions.round.start');
     Route::post('/sessions/{session}/round/end', [RoundController::class, 'end'])->name('sessions.round.end');
+
+    // Kendali jam kelas: guru bisa menambah waktu atau mematikan batasnya.
+    Route::post('/sessions/{session}/time/extend', [RoundController::class, 'extendTime'])->name('sessions.time.extend');
+    Route::post('/sessions/{session}/time/unlimited', [RoundController::class, 'removeTimeLimit'])->name('sessions.time.unlimited');
     Route::post('/sessions/{session}/round/reset', [RoundController::class, 'reset'])->name('sessions.round.reset');
     Route::post('/sessions/{session}/lobby', [RoundController::class, 'toggleLobby'])->name('sessions.lobby');
 

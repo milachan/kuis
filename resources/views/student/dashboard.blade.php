@@ -67,11 +67,18 @@
         </div>
     @endif
 
-    {{-- Waktu habis --}}
-    @if ($session->isTimeUp())
+    {{-- Jam kelas habis. Kelompok yang baru mulai mengerjakan ronde tetap punya
+         jatah waktunya sendiri, jadi jangan ditakut-takuti dengan pesan merah. --}}
+    @if (! $acceptsSubmissions)
         <div class="mb-6 rounded-2xl border-2 border-coral-400/40 bg-coral-400/10 p-4 text-sm font-semibold text-coral-500">
             <strong>Waktu sesi sudah habis.</strong>
             Kiriman baru tidak dapat diproses, tetapi hasil yang sudah kamu kirim tetap tersimpan.
+        </div>
+    @elseif ($session->isTimeUp())
+        <div class="mb-6 rounded-2xl border-2 border-sun-400/40 bg-sun-300/20 p-4 text-sm font-semibold text-ink-700">
+            <strong>Jam kelas sudah habis.</strong>
+            Kamu masih bisa mengerjakan ronde yang baru kamu buka — jatah waktunya dihitung sejak
+            kamu membuka rondenya.
         </div>
     @endif
 
@@ -87,6 +94,8 @@
                 $isCompleted = $progress->status === \App\Models\TeamProgress::STATUS_COMPLETED;
                 $isLocked = $progress->isLocked();
                 $isWaiting = $progress->status === \App\Models\TeamProgress::STATUS_WAITING_VALIDATION;
+                // Ronde yang sedang dibuka guru: kartu ini bisa dikerjakan sekarang.
+                $isOpen = in_array((int) $mission->order, $openRoundNumbers, true);
             @endphp
 
             @if ($isLocked)
@@ -133,6 +142,9 @@
                             </p>
 
                             <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                                @if ($isOpen)
+                                    <span class="badge bg-mint-400/25 text-mint-600">🎯 SEDANG DIBUKA</span>
+                                @endif
                                 <span class="badge bg-sky-100 text-sky-700">
                                     {{ $mission->difficulty }}
                                 </span>

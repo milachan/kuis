@@ -57,6 +57,21 @@
             @endif
             <p class="mt-1 text-xs font-semibold text-ink-600">Perbaiki jawabanmu, lalu kirim ulang di bawah.</p>
         </div>
+    @elseif ($submission && $submission->status === \App\Models\Submission::STATUS_WAITING && $submission->answerIsOnlyGameSummary())
+        {{--
+            Baru main game: yang tersimpan masih ringkasan permainan, bukan
+            jawaban uraian. Jangan tulis "Jawaban Terkirim", karena anak jadi
+            mengira rondenya sudah selesai dan melewatkan soal uraian.
+        --}}
+        <div class="mb-5 rounded-3xl border-2 border-grape-400/30 bg-grape-400/10 p-4">
+            <p class="flex items-center gap-2 text-sm font-black text-grape-500">
+                <span class="text-lg">⏳</span> Hasil Game Sudah Tercatat
+            </p>
+            <p class="mt-1 text-xs font-semibold text-ink-700">
+                Permainan ronde ini sudah tersimpan. Sekarang tulis jawaban
+                <strong>soal uraian</strong> di bawah, lalu kirim — itu bukti utama ronde ini.
+            </p>
+        </div>
     @elseif ($submission && $submission->status === \App\Models\Submission::STATUS_WAITING)
         <div class="mb-5 rounded-3xl border-2 border-sun-400/40 bg-sun-300/20 p-4">
             <p class="flex items-center gap-2 text-sm font-black text-ink-800">
@@ -67,8 +82,10 @@
                 Kamu masih bisa mengirim ulang bila perlu.
             </p>
             <p class="mt-2 rounded-2xl bg-white/70 px-3 py-2 text-xs font-semibold text-ink-700">
-                👉 <strong>Sudah selesai?</strong> Tunggu aba-aba guru untuk ronde berikutnya.
-                Halaman ini akan otomatis berpindah saat ronde baru dibuka, atau kamu bisa kembali ke
+                👉 <strong>Sudah selesai?</strong> Buka bilah
+                <strong>🎯 Pindah Ronde</strong> di bagian atas halaman untuk melihat semua ronde
+                yang sedang dibuka dan berpindah ke ronde berikutnya kapan saja. Boleh juga kembali
+                ke
                 <a href="{{ route('student.dashboard') }}" class="font-bold text-sky-600 underline">daftar misi</a>.
             </p>
         </div>
@@ -159,6 +176,32 @@
                 </div>
             @endif
 
+            {{--
+                Hasil game ronde ini. Permainan arcade hanya separuh ronde:
+                tanpa catatan ini anak sering mengira rondenya sudah selesai
+                dan melewatkan soal uraian yang memberi XP penuh.
+            --}}
+            @if ($submission && $submission->game_played_at && ! $progress->isCompleted())
+                <div class="card-bright border-grape-400/30">
+                    <h2 class="flex items-center gap-2 text-sm font-black uppercase tracking-wider text-grape-500">
+                        <span class="text-lg">🎮</span> Hasil Game Ronde Ini
+                    </h2>
+                    <p class="mt-2 text-sm font-semibold text-ink-800">
+                        Jawaban benar <strong>{{ (int) $submission->game_correct }}</strong>
+                        dari {{ (int) $submission->game_correct + (int) $submission->game_wrong }} soal
+                        · Skor main <strong>{{ (int) $submission->game_score }}</strong>
+                        @if ($progress->xp > 0)
+                            · XP ronde ini <strong class="text-mint-600">{{ $progress->xp }}</strong>
+                        @endif
+                    </p>
+                    <p class="mt-1.5 text-xs font-semibold leading-relaxed text-ink-700">
+                        👉 Langkah berikutnya: tulis jawaban <strong>soal uraian</strong> di bawah ini.
+                        Permainan sudah menyumbang sebagian XP, dan XP misi menjadi penuh setelah
+                        jawaban uraianmu dinilai.
+                    </p>
+                </div>
+            @endif
+
             {{-- Form kiriman --}}
             @if ($progress->isCompleted())
                 <div class="card-bright">
@@ -176,12 +219,20 @@
                         Jawab pertanyaan di bawah ini, lalu kirim. AI akan menilai jawabanmu.
                     </p>
 
-                    @if (! $session->acceptsSubmissions())
+                    @if (! $acceptsSubmissions)
                         <div class="rounded-2xl border-2 border-coral-400/40 bg-coral-400/10 p-3 text-sm font-semibold text-coral-500">
                             {{ $session->isEnded() ? 'Sesi sudah berakhir.' : 'Waktu sesi sudah habis.' }}
                             Kiriman baru tidak dapat diproses.
                         </div>
                     @else
+                        @if ($lateGrace)
+                            <div class="mb-4 rounded-2xl border-2 border-sun-400/40 bg-sun-300/20 p-3 text-sm font-semibold text-ink-700">
+                                <strong>Jam kelas sudah habis, tapi kamu baru mulai ronde ini.</strong>
+                                Santai — kamu memakai jatah waktu ronde milikmu sendiri, dihitung sejak
+                                halaman ini kamu buka. Lihat panel
+                                <strong>Waktu Mengerjakanku</strong> di bawah.
+                            </div>
+                        @endif
                         @include('student.partials.submission-form', [
                             'mission' => $mission,
                             'submission' => $submission,
@@ -193,36 +244,6 @@
 
         {{-- ===================== KOLOM KANAN ===================== --}}
         <div class="space-y-5">
-
-            {{-- Kode rahasia --}}
-            @if (! $progress->isCompleted())
-                <div class="rounded-3xl border-2 border-sun-400/40 bg-sun-300/20 p-5 shadow-sm">
-                    <h2 class="mb-1 flex items-center gap-2 text-sm font-black uppercase tracking-wider text-ink-800">
-                        <span class="text-lg">🔑</span> Kode Rahasia
-                    </h2>
-                    <p class="mb-4 text-xs font-semibold leading-relaxed text-ink-700">
-                        {{ $mission->code_prompt ?? 'Masukkan kode rahasia yang kamu temukan.' }}
-                    </p>
-
-                    @if ($progress->isCompleted())
-                        <div class="rounded-2xl border-2 border-mint-400/40 bg-white p-3 text-center text-sm font-black text-mint-600">
-                            ✓ Kode sudah terverifikasi
-                        </div>
-                    @else
-                        <label for="code" class="label-field">Kode ditemukan</label>
-                        <input id="code"
-                               type="text"
-                               name="code"
-                               form="submission-form"
-                               autocomplete="off"
-                               placeholder="TULIS KODE DI SINI"
-                               class="input-field text-center font-mono text-lg font-black uppercase tracking-widest">
-                        <p class="mt-2 text-xs font-semibold text-ink-600">
-                            Kode tidak ditampilkan di halaman ini. Temukan dari layar guru.
-                        </p>
-                    @endif
-                </div>
-            @endif
 
             {{-- Petunjuk --}}
             @if ($hintsEnabled)

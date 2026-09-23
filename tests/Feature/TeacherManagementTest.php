@@ -71,9 +71,6 @@ class TeacherManagementTest extends TestCase
         $response->assertRedirect(route('teacher.sessions.show', $session));
 
         $this->assertDatabaseHas('game_sessions', ['code' => 'TIK8-8A', 'duration_minutes' => 45]);
-
-        // Kode rahasia harus dibuat untuk setiap misi aktif.
-        $this->assertSame(2, $session->missionCodes()->count());
     }
 
     public function test_kode_sesi_duplikat_ditolak(): void
@@ -108,29 +105,6 @@ class TeacherManagementTest extends TestCase
             ->assertRedirect();
 
         $this->assertSame(GameSession::STATUS_ACTIVE, $session->fresh()->status);
-    }
-
-    public function test_guru_dapat_mengubah_kode_rahasia_misi(): void
-    {
-        $this->makeMissions(1);
-        $session = $this->makeSession();
-        $mission = Mission::query()->firstOrFail();
-
-        // Buat kode awal.
-        app(MissionService::class)->generateCodes($session);
-
-        $this->actingAs($this->teacher())->put('/teacher/sessions/'.$session->id, [
-            'name' => $session->name,
-            'code' => $session->code,
-            'duration_minutes' => 60,
-            'codes' => [$mission->id => 'RAHASIAKU'],
-        ]);
-
-        $this->assertDatabaseHas('mission_codes', [
-            'game_session_id' => $session->id,
-            'mission_id' => $mission->id,
-            'code' => 'RAHASIAKU',
-        ]);
     }
 
     // -----------------------------------------------------------------

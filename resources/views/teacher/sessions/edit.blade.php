@@ -13,7 +13,6 @@
         @include('teacher.sessions.partials.form', [
             'session' => $session,
             'missionList' => $missionList,
-            'codes' => $codes,
         ])
 
         <div class="mt-6 flex flex-wrap gap-2">

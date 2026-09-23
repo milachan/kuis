@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\GameSession;
 use App\Models\Mission;
-use App\Models\MissionCode;
 use Illuminate\Database\Seeder;
 
 /**
@@ -84,7 +83,7 @@ class Bab3MateriSeeder extends Seeder
     }
 
     /**
-     * Sesi demo memakai 7 ronde baru + kode rahasia.
+     * Sesi demo memakai 7 ronde baru.
      *
      * @param  array<string, Mission>  $missions
      */
@@ -109,42 +108,6 @@ class Bab3MateriSeeder extends Seeder
             ]
         );
 
-        MissionCode::query()
-            ->where('game_session_id', $session->id)
-            ->whereNotIn('mission_id', collect($missions)->pluck('id')->all())
-            ->delete();
-
-        foreach ($this->kodeRahasia() as $slug => $code) {
-            if (! isset($missions[$slug])) {
-                continue;
-            }
-
-            MissionCode::query()->updateOrCreate(
-                [
-                    'game_session_id' => $session->id,
-                    'mission_id' => $missions[$slug]->id,
-                ],
-                ['code' => $code]
-            );
-        }
-    }
-
-    /**
-     * Kode rahasia tiap ronde (dicek ke database, tidak dikirim ke murid).
-     *
-     * @return array<string, string>
-     */
-    protected function kodeRahasia(): array
-    {
-        return [
-            'komponen-sistem-komputer' => 'KOMPONEN',
-            'perangkat-io' => 'INPUT',
-            'cpu-pemrosesan' => 'PROSESOR',
-            'penyimpanan-cloud' => 'CLOUD',
-            'sistem-operasi' => 'OS',
-            'aplikasi-pemrograman' => 'KODE',
-            'heksadesimal' => 'HEXA',
-        ];
     }
 
     /**
@@ -176,9 +139,7 @@ class Bab3MateriSeeder extends Seeder
                     'Baca soal tentang komponen komputer, lalu pilih jawaban yang benar.',
                     'Jawaban benar membuat ular bertambah panjang dan skor bertambah.',
                     'Jawaban salah membuat nyawa berkurang satu.',
-                    'Kode rahasia ronde ini ada di layar guru.',
                 ],
-                'code_prompt' => 'Masukkan kode rahasia Ronde 1.',
                 'hint_1' => 'Hardware bisa disentuh, software berupa program, brainware adalah manusia penggunanya.',
                 'hint_2' => 'Contoh hardware: monitor, keyboard. Contoh software: Windows, Word.',
                 'reflection_question' => null,
@@ -187,6 +148,41 @@ class Bab3MateriSeeder extends Seeder
                         'pertanyaan' => 'Komponen komputer yang bisa disentuh disebut...',
                         'pilihan' => ['Hardware', 'Software', 'Brainware'],
                         'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Program atau aplikasi yang dijalankan komputer disebut...',
+                        'pilihan' => ['Hardware', 'Software', 'Brainware'],
+                        'jawaban' => 1,
+                    ],
+                    [
+                        'pertanyaan' => 'Manusia yang mengoperasikan komputer disebut...',
+                        'pilihan' => ['Hardware', 'Software', 'Brainware'],
+                        'jawaban' => 2,
+                    ],
+                    [
+                        'pertanyaan' => 'Monitor, keyboard, dan mouse termasuk...',
+                        'pilihan' => ['Hardware', 'Software', 'Brainware'],
+                        'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Windows dan Android adalah contoh...',
+                        'pilihan' => ['Perangkat keras', 'Perangkat lunak', 'Pengguna'],
+                        'jawaban' => 1,
+                    ],
+                    [
+                        'pertanyaan' => 'Tanpa brainware, komputer tidak dapat...',
+                        'pilihan' => ['Dirakit', 'Dijual', 'Dioperasikan'],
+                        'jawaban' => 2,
+                    ],
+                    [
+                        'pertanyaan' => 'Urutan komponen sistem komputer adalah...',
+                        'pilihan' => ['Hardware, software, brainware', 'Software, hardware, brainware', 'Brainware, hardware, software'],
+                        'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Contoh perangkat lunak sistem operasi adalah...',
+                        'pilihan' => ['Monitor', 'Windows', 'Keyboard'],
+                        'jawaban' => 1,
                     ],
                 ],
                 'questions' => [
@@ -215,9 +211,7 @@ class Bab3MateriSeeder extends Seeder
                     'Gerakkan mouse di atas papan untuk memantulkan bola.',
                     'Jawab soal dengan benar agar bola memecahkan bata.',
                     'Jawaban salah membuat bola hilang satu.',
-                    'Kode rahasia ronde ini ada di layar guru.',
                 ],
-                'code_prompt' => 'Masukkan kode rahasia Ronde 2.',
                 'hint_1' => 'Masukan = alat yang mengirim data KE komputer. Keluaran = alat yang menampilkan HASIL.',
                 'hint_2' => 'Keyboard dan mouse adalah masukan. Monitor dan speaker adalah keluaran.',
                 'reflection_question' => null,
@@ -226,6 +220,41 @@ class Bab3MateriSeeder extends Seeder
                         'pertanyaan' => 'Keyboard termasuk perangkat...',
                         'pilihan' => ['Masukan (input)', 'Keluaran (output)', 'Penyimpanan'],
                         'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Monitor termasuk perangkat...',
+                        'pilihan' => ['Masukan (input)', 'Keluaran (output)', 'Penyimpanan'],
+                        'jawaban' => 1,
+                    ],
+                    [
+                        'pertanyaan' => 'Mouse berfungsi untuk...',
+                        'pilihan' => ['Menampilkan gambar', 'Menyimpan data', 'Menggerakkan kursor'],
+                        'jawaban' => 2,
+                    ],
+                    [
+                        'pertanyaan' => 'Printer menghasilkan keluaran berupa...',
+                        'pilihan' => ['Cetakan di kertas', 'Suara', 'Gambar di layar'],
+                        'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Speaker termasuk perangkat keluaran berupa...',
+                        'pilihan' => ['Gambar', 'Suara', 'Teks'],
+                        'jawaban' => 1,
+                    ],
+                    [
+                        'pertanyaan' => 'Scanner berfungsi untuk...',
+                        'pilihan' => ['Memutar musik', 'Mencetak dokumen', 'Memasukkan data dari kertas ke komputer'],
+                        'jawaban' => 2,
+                    ],
+                    [
+                        'pertanyaan' => 'Flashdisk termasuk perangkat...',
+                        'pilihan' => ['Penyimpanan', 'Keluaran', 'Masukan'],
+                        'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Mikrofon menangkap suara lalu mengirimkannya ke komputer. Mikrofon termasuk...',
+                        'pilihan' => ['Keluaran', 'Masukan', 'Penyimpanan'],
+                        'jawaban' => 1,
                     ],
                 ],
                 'questions' => [
@@ -255,9 +284,7 @@ class Bab3MateriSeeder extends Seeder
                     'Tekan spasi (atau sentuh papan) untuk membuat burung terbang.',
                     'Jawab soal dengan benar agar burung mendapat tenaga ekstra.',
                     'Jawaban salah membuat burung jatuh.',
-                    'Kode rahasia ronde ini ada di layar guru.',
                 ],
-                'code_prompt' => 'Masukkan kode rahasia Ronde 3.',
                 'hint_1' => 'Control Unit mengendalikan, ALU menghitung, Register menyimpan sementara.',
                 'hint_2' => 'Prosesor sering disebut otak komputer.',
                 'reflection_question' => null,
@@ -266,6 +293,41 @@ class Bab3MateriSeeder extends Seeder
                         'pertanyaan' => 'Bagian prosesor yang melakukan perhitungan disebut...',
                         'pilihan' => ['ALU', 'Control Unit', 'Register'],
                         'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Bagian prosesor yang mengatur urutan perintah disebut...',
+                        'pilihan' => ['ALU', 'Control Unit', 'Register'],
+                        'jawaban' => 1,
+                    ],
+                    [
+                        'pertanyaan' => 'Prosesor sering disebut sebagai...',
+                        'pilihan' => ['Memori', 'Layar', 'Otak komputer'],
+                        'jawaban' => 2,
+                    ],
+                    [
+                        'pertanyaan' => 'Singkatan CPU adalah...',
+                        'pilihan' => ['Central Processing Unit', 'Computer Personal Unit', 'Control Program Utility'],
+                        'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Tempat penyimpanan sementara di dalam prosesor disebut...',
+                        'pilihan' => ['Monitor', 'Register', 'Printer'],
+                        'jawaban' => 1,
+                    ],
+                    [
+                        'pertanyaan' => 'Perhitungan 2 + 3 dilakukan oleh bagian...',
+                        'pilihan' => ['Control Unit', 'Hard disk', 'ALU'],
+                        'jawaban' => 2,
+                    ],
+                    [
+                        'pertanyaan' => 'Kecepatan prosesor diukur dengan satuan...',
+                        'pilihan' => ['Gigahertz (GHz)', 'Kilogram (kg)', 'Liter (L)'],
+                        'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Semakin tinggi kecepatan prosesor, pekerjaan komputer menjadi...',
+                        'pilihan' => ['Lebih lambat', 'Lebih cepat', 'Tidak berubah'],
+                        'jawaban' => 1,
                     ],
                 ],
                 'questions' => [
@@ -295,9 +357,7 @@ class Bab3MateriSeeder extends Seeder
                     'Gunakan tombol panah atau W A S D untuk menggerakkan ular.',
                     'Jawab soal tentang penyimpanan dengan benar untuk memanjangkan ular.',
                     'Jawaban salah mengurangi nyawa.',
-                    'Kode rahasia ronde ini ada di layar guru.',
                 ],
-                'code_prompt' => 'Masukkan kode rahasia Ronde 4.',
                 'hint_1' => 'Awan = menyimpan data di internet, bisa dibuka dari perangkat mana saja.',
                 'hint_2' => 'Contoh layanan awan: Google Drive, OneDrive, Dropbox.',
                 'reflection_question' => null,
@@ -306,6 +366,41 @@ class Bab3MateriSeeder extends Seeder
                         'pertanyaan' => 'Menyimpan data di internet disebut...',
                         'pilihan' => ['Cloud computing', 'Hard disk', 'Flashdisk'],
                         'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Contoh layanan penyimpanan awan adalah...',
+                        'pilihan' => ['Monitor', 'Google Drive', 'Keyboard'],
+                        'jawaban' => 1,
+                    ],
+                    [
+                        'pertanyaan' => 'Keuntungan menyimpan data di awan adalah...',
+                        'pilihan' => ['Tidak perlu internet', 'Harus selalu bawa flashdisk', 'Bisa diakses dari mana saja'],
+                        'jawaban' => 2,
+                    ],
+                    [
+                        'pertanyaan' => 'Penyimpanan yang ada di dalam komputer dan tidak mudah dibawa disebut...',
+                        'pilihan' => ['Internal (hard disk)', 'Eksternal', 'Cloud'],
+                        'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Syarat utama mengakses data di cloud adalah...',
+                        'pilihan' => ['Printer', 'Koneksi internet', 'Speaker'],
+                        'jawaban' => 1,
+                    ],
+                    [
+                        'pertanyaan' => 'Agar data penting tidak hilang saat perangkat rusak, sebaiknya...',
+                        'pilihan' => ['Dibiarkan', 'Dihapus saja', 'Disimpan di dua tempat (backup)'],
+                        'jawaban' => 2,
+                    ],
+                    [
+                        'pertanyaan' => 'Kapasitas penyimpanan biasanya diukur dalam...',
+                        'pilihan' => ['Gigabyte (GB)', 'Gigahertz (GHz)', 'Meter (m)'],
+                        'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Menyimpan salinan data cadangan disebut...',
+                        'pilihan' => ['Browsing', 'Backup', 'Printing'],
+                        'jawaban' => 1,
                     ],
                 ],
                 'questions' => [
@@ -333,9 +428,7 @@ class Bab3MateriSeeder extends Seeder
                 'instructions' => [
                     'Gerakkan mouse di atas papan untuk memantulkan bola.',
                     'Jawab soal tentang sistem operasi dengan benar.',
-                    'Kode rahasia ronde ini ada di layar guru.',
                 ],
-                'code_prompt' => 'Masukkan kode rahasia Ronde 5.',
                 'hint_1' => 'Sistem operasi mengontrol dan mengatur sumber daya komputer.',
                 'hint_2' => 'Windows, Linux, MacOS untuk komputer. Android, iOS untuk ponsel.',
                 'reflection_question' => null,
@@ -344,6 +437,41 @@ class Bab3MateriSeeder extends Seeder
                         'pertanyaan' => 'Program yang mengatur seluruh kerja komputer disebut...',
                         'pilihan' => ['Sistem operasi', 'Keyboard', 'Monitor'],
                         'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Contoh sistem operasi komputer adalah...',
+                        'pilihan' => ['Microsoft Word', 'Windows', 'Google Chrome'],
+                        'jawaban' => 1,
+                    ],
+                    [
+                        'pertanyaan' => 'Contoh sistem operasi ponsel adalah...',
+                        'pilihan' => ['Photoshop', 'Word', 'Android'],
+                        'jawaban' => 2,
+                    ],
+                    [
+                        'pertanyaan' => 'Sistem operasi bertugas mengatur...',
+                        'pilihan' => ['Perangkat keras dan program', 'Hanya warna layar', 'Hanya suara'],
+                        'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Aplikasi dijalankan di atas...',
+                        'pilihan' => ['Printer', 'Sistem operasi', 'Flashdisk'],
+                        'jawaban' => 1,
+                    ],
+                    [
+                        'pertanyaan' => 'Tanpa sistem operasi, komputer...',
+                        'pilihan' => ['Tetap normal', 'Berjalan lebih cepat', 'Tidak dapat menjalankan aplikasi'],
+                        'jawaban' => 2,
+                    ],
+                    [
+                        'pertanyaan' => 'Contoh sistem operasi komputer bersumber terbuka (open source) adalah...',
+                        'pilihan' => ['Linux', 'Windows', 'macOS'],
+                        'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Bagian sistem operasi yang menampilkan ikon dan jendela disebut...',
+                        'pilihan' => ['Prosesor', 'Antarmuka (interface)', 'Memori'],
+                        'jawaban' => 1,
                     ],
                 ],
                 'questions' => [
@@ -372,9 +500,7 @@ class Bab3MateriSeeder extends Seeder
                 'instructions' => [
                     'Tekan spasi atau sentuh papan untuk terbang.',
                     'Jawab soal tentang aplikasi dan pemrograman dengan benar.',
-                    'Kode rahasia ronde ini ada di layar guru.',
                 ],
-                'code_prompt' => 'Masukkan kode rahasia Ronde 6.',
                 'hint_1' => 'Aplikasi untuk pengguna biasa, bahasa pemrograman untuk pembuat program.',
                 'hint_2' => 'Scratch dan Python adalah bahasa pemrograman.',
                 'reflection_question' => null,
@@ -383,6 +509,41 @@ class Bab3MateriSeeder extends Seeder
                         'pertanyaan' => 'Python dan Scratch termasuk...',
                         'pilihan' => ['Bahasa pemrograman', 'Aplikasi perkantoran', 'Perangkat keras'],
                         'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Microsoft Word termasuk perangkat lunak...',
+                        'pilihan' => ['Bahasa pemrograman', 'Aplikasi pengolah kata', 'Sistem operasi'],
+                        'jawaban' => 1,
+                    ],
+                    [
+                        'pertanyaan' => 'Microsoft Excel digunakan untuk mengolah...',
+                        'pilihan' => ['Suara', 'Gambar bergerak', 'Angka dan tabel'],
+                        'jawaban' => 2,
+                    ],
+                    [
+                        'pertanyaan' => 'Perangkat lunak untuk membuat presentasi adalah...',
+                        'pilihan' => ['PowerPoint', 'Notepad', 'WinRAR'],
+                        'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Scratch cocok untuk belajar pemrograman karena...',
+                        'pilihan' => ['Hanya untuk ahli', 'Berbasis blok yang mudah', 'Tidak bisa dijalankan'],
+                        'jawaban' => 1,
+                    ],
+                    [
+                        'pertanyaan' => 'Programmer menulis kode menggunakan...',
+                        'pilihan' => ['Monitor', 'Kalkulator', 'Bahasa pemrograman'],
+                        'jawaban' => 2,
+                    ],
+                    [
+                        'pertanyaan' => 'Perbedaan aplikasi dan bahasa pemrograman adalah...',
+                        'pilihan' => ['Aplikasi siap pakai, bahasa pemrograman untuk membuat program', 'Keduanya sama saja', 'Bahasa pemrograman siap pakai'],
+                        'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Aplikasi perkantoran biasanya berisi pengolah kata, angka, dan...',
+                        'pilihan' => ['Prosesor', 'Presentasi', 'Keyboard'],
+                        'jawaban' => 1,
                     ],
                 ],
                 'questions' => [
@@ -412,9 +573,7 @@ class Bab3MateriSeeder extends Seeder
                     'Gunakan tombol panah atau W A S D untuk menggerakkan ular.',
                     'Ingat: A=10, B=11, C=12, D=13, E=14, F=15.',
                     'Jawab soal heksadesimal dengan benar untuk memanjangkan ular.',
-                    'Kode rahasia ronde ini ada di layar guru.',
                 ],
-                'code_prompt' => 'Masukkan kode rahasia Ronde 7.',
                 'hint_1' => 'Heksadesimal berarti berbasis 16, bukan 10 seperti angka biasa.',
                 'hint_2' => 'Setelah angka 9, huruf A bernilai 10, sampai F bernilai 15.',
                 'reflection_question' => null,
@@ -423,6 +582,41 @@ class Bab3MateriSeeder extends Seeder
                         'pertanyaan' => 'Dalam heksadesimal, huruf F bernilai...',
                         'pilihan' => ['15', '16', '5'],
                         'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Sistem bilangan heksadesimal berbasis...',
+                        'pilihan' => ['10', '16', '2'],
+                        'jawaban' => 1,
+                    ],
+                    [
+                        'pertanyaan' => 'Dalam heksadesimal, huruf A bernilai...',
+                        'pilihan' => ['1', '11', '10'],
+                        'jawaban' => 2,
+                    ],
+                    [
+                        'pertanyaan' => 'Bilangan heksadesimal 10 sama dengan desimal...',
+                        'pilihan' => ['16', '10', '2'],
+                        'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Simbol yang dipakai heksadesimal adalah...',
+                        'pilihan' => ['0-9 saja', '0-9 dan A-F', '0-1 saja'],
+                        'jawaban' => 1,
+                    ],
+                    [
+                        'pertanyaan' => 'Warna di komputer sering ditulis dengan kode heksadesimal, misalnya...',
+                        'pilihan' => ['255Putih', 'Putih Sekali', '#FFFFFF'],
+                        'jawaban' => 2,
+                    ],
+                    [
+                        'pertanyaan' => 'Nilai desimal dari heksadesimal C adalah...',
+                        'pilihan' => ['12', '13', '3'],
+                        'jawaban' => 0,
+                    ],
+                    [
+                        'pertanyaan' => 'Heksadesimal banyak dipakai karena dapat menuliskan bilangan biner dengan...',
+                        'pilihan' => ['Lebih panjang', 'Lebih singkat', 'Tidak jelas'],
+                        'jawaban' => 1,
                     ],
                 ],
                 'questions' => [

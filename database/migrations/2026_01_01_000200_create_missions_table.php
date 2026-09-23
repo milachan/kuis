@@ -7,8 +7,10 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Daftar misi pembelajaran. Bersifat global (dipakai semua sesi),
-     * kecuali kode rahasia yang disimpan per sesi di `mission_codes`.
+     * Daftar misi pembelajaran. Bersifat global (dipakai semua sesi).
+     *
+     * Kolom `code_prompt` (kode rahasia) sudah dihapus lewat migrasi
+     * 2026_01_01_001800_drop_mission_codes_and_code_prompt.
      */
     public function up(): void
     {
@@ -21,7 +23,7 @@ return new class extends Migration
             $table->text('story');       // Cerita pembuka misi
             $table->text('objective');   // Tujuan pembelajaran
             $table->json('instructions'); // Langkah-langkah praktik
-            $table->text('code_prompt')->nullable(); // Pertanyaan "masukkan kode rahasia"
+            $table->text('code_prompt')->nullable(); // [dihapus di migrasi 001800]
             $table->text('hint_1')->nullable();
             $table->text('hint_2')->nullable();
             $table->text('reflection_question')->nullable(); // Pertanyaan refleksi singkat

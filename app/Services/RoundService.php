@@ -6,6 +6,7 @@ use App\Models\GameSession;
 use App\Models\Mission;
 use App\Models\Team;
 use App\Models\TeamProgress;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -79,40 +80,69 @@ class RoundService
     }
 
     /**
-     * Buka ronde mana saja — termasuk ronde yang sudah lewat (mundur).
+     * Buka BEBERAPA ronde sekaligus.
      *
-     * Dipakai guru untuk memilih ronde langsung dari daftar ronde, bukan
-     * hanya maju satu per satu. Berbeda dari `start()`, semua ronde SELAIN
-     * ronde yang dibuka akan ditutup, sehingga guru bisa kembali ke ronde
-     * sebelumnya walau sudah maju ke ronde berikutnya.
+     * Guru boleh mencentang ronde 1, 3, dan 5: ketiganya terbuka bersamaan dan
+     * kelompok bebas memilih mau mengerjakan yang mana (kelompok tidak lagi
+     * dipaksa menunggu satu ronde selesai). Ronde yang TIDAK dipilih otomatis
+     * ditutup, sehingga guru juga bisa memakai cara ini untuk mundur ke ronde
+     * sebelumnya.
      *
-     * XP dan jawaban yang sudah terkumpul TIDAK dihapus, jadi mengulang
-     * ronde tidak merusak skor murid.
+     * `current_round` diisi ronde paling besar sebagai ronde terdepan: dipakai
+     * tombol "Ronde Berikutnya" dan penanda di layar proyektor.
+     *
+     * XP dan jawaban yang sudah terkumpul TIDAK dihapus.
+     *
+     * @param  array<int, int>  $rounds
      */
-    public function openRound(GameSession $session, int $round, ?int $durationMinutes = null): GameSession
+    public function openRounds(GameSession $session, array $rounds, ?int $durationMinutes = null): GameSession
     {
-        $mission = $this->missionForRound($round);
+        $nomor = collect($rounds)
+            ->map(fn ($r) => (int) $r)
+            ->unique()
+            ->filter(fn (int $r) => $r > 0)
+            ->sort()
+            ->values()
+            ->all();
 
-        if (! $mission) {
+        $dipilih = collect($nomor)
+            ->map(fn (int $r) => $this->missionForRound($r))
+            ->filter()
+            ->values();
+
+        if ($dipilih->isEmpty()) {
             return $session;
         }
 
-        DB::transaction(function () use ($session, $mission, $round, $durationMinutes) {
-            // Tutup semua ronde lain (baik sebelum maupun sesudah ronde ini),
-            // supaya hanya SATU ronde yang bisa dikerjakan pada satu waktu.
-            $this->closeOtherRounds($session, $round);
+        $nomor = $dipilih->map(fn (Mission $m) => (int) $m->order)->sort()->values()->all();
+        $mulaiJam = $this->clockStartTime($session);
+
+        DB::transaction(function () use ($session, $dipilih, $nomor, $durationMinutes, $mulaiJam) {
+            // Tutup semua ronde di luar pilihan (baik yang sebelum maupun
+            // sesudahnya) supaya "yang terbuka" persis sama dengan pilihan guru.
+            $this->closeRoundsExcept($session, $nomor);
 
             $session->update([
-                'current_round' => $round,
+                'current_round' => max($nomor),
+                'open_rounds' => $nomor,
                 'round_status' => GameSession::ROUND_RUNNING,
                 'round_started_at' => now(),
+                // Jam kelas mulai berjalan saat permainan benar-benar dimulai,
+                // bukan saat sesi dibuat (lihat clockStartTime()).
+                'start_time' => $mulaiJam,
                 'round_duration_minutes' => $durationMinutes ?? $session->round_duration_minutes,
+                // Kunci lobby agar kelompok baru tidak masuk di tengah ronde.
                 'lobby_locked' => true,
             ]);
 
-            // Buka misi ronde pilihan untuk semua kelompok.
+            // Buka semua misi terpilih untuk SEMUA kelompok di sesi ini.
+            // Ronde yang dipilih guru BUKAN "pendatang baru" ($lateEntry = false),
+            // supaya saat guru mengganti pilihan, ronde yang dilepas benar-benar
+            // ditutup kembali.
             foreach ($session->teams as $team) {
-                $this->missions->unlockManually($team, $mission);
+                foreach ($dipilih as $mission) {
+                    $this->missions->unlockManually($team, $mission, false);
+                }
             }
         });
 
@@ -120,17 +150,119 @@ class RoundService
     }
 
     /**
-     * Tutup SEMUA misi kecuali ronde yang sedang dibuka.
+     * Waktu mulai jam kelas yang harus dipakai saat ronde dibuka.
+     *
+     * Sesi baru dibuat dengan `start_time` kosong supaya jam kelas TIDAK
+     * berjalan selama guru menyiapkan kelas. Jam baru dinyalakan di sini:
+     *
+     * - belum pernah dinyalakan -> mulai dari sekarang;
+     * - jamnya sudah habis tetapi guru masih membuka ronde -> dinyalakan ulang,
+     *   karena kelas jelas masih berjalan dan tanpa ini semua kiriman akan
+     *   ditolak tanpa sebab yang terlihat guru.
+     */
+    protected function clockStartTime(GameSession $session): ?Carbon
+    {
+        // Durasi 0 = tanpa batas waktu: tidak ada jam yang perlu dinyalakan.
+        if ($session->duration_minutes <= 0) {
+            return $session->start_time;
+        }
+
+        if ($session->start_time === null || $session->isTimeUp()) {
+            return now();
+        }
+
+        return $session->start_time;
+    }
+
+    /**
+     * Tambah jatah waktu kelas.
+     *
+     * Batas waktu baru dihitung dari yang paling akhir antara sisa waktu yang
+     * masih ada dan waktu sekarang, sehingga menekan tombol ini selalu berarti
+     * "kelas punya tambahan N menit lagi" — termasuk bila jamnya sudah telanjur
+     * habis (kelas tidak langsung terkunci lagi).
+     */
+    public function extendTime(GameSession $session, int $minutes = 15): GameSession
+    {
+        if ($session->duration_minutes <= 0) {
+            return $session; // Tanpa batas waktu: tidak ada yang bisa ditambah.
+        }
+
+        $batas = $session->deadline();
+        $dasar = ($batas === null || $batas->isPast()) ? now() : $batas;
+
+        $session->update([
+            'start_time' => $dasar->copy()->addMinutes($minutes)->subMinutes($session->duration_minutes),
+        ]);
+
+        return $session->refresh();
+    }
+
+    /**
+     * Matikan batas waktu kelas (durasi 0 = tanpa batas).
+     *
+     * Dipakai ketika guru masih ingin melanjutkan permainan tetapi tidak mau
+     * ada kiriman yang ditolak karena jam kelas habis.
+     */
+    public function removeTimeLimit(GameSession $session): GameSession
+    {
+        $session->update([
+            'duration_minutes' => 0,
+            'start_time' => null,
+        ]);
+
+        return $session->refresh();
+    }
+
+    /**
+     * Buka satu ronde saja (ronde lain ditutup).
+     *
+     * Dipakai guru untuk mundur ke ronde sebelumnya atau melompat ke ronde
+     * tertentu dari daftar ronde.
+     */
+    public function openRound(GameSession $session, int $round, ?int $durationMinutes = null): GameSession
+    {
+        return $this->openRounds($session, [$round], $durationMinutes);
+    }
+
+    /**
+     * Tutup SEMUA ronde yang sedang terbuka.
+     *
+     * Dipakai ketika guru ingin menghentikan pengerjaan tanpa membuka ronde
+     * lain (mis. kelas sudah selesai lebih cepat).
+     */
+    public function closeAllRounds(GameSession $session): GameSession
+    {
+        DB::transaction(function () use ($session) {
+            $this->closeRoundsExcept($session, []);
+
+            $session->update([
+                'open_rounds' => [],
+                'round_status' => GameSession::ROUND_ENDED,
+                'round_started_at' => null,
+            ]);
+        });
+
+        return $session->refresh();
+    }
+
+    /**
+     * Tutup semua misi KECUALI ronde yang disebut di $keep.
      *
      * Misi yang sudah selesai / menunggu validasi dibiarkan, karena
-     * jawabannya sudah masuk dan XP-nya harus tetap aman. Yang ditutup
-     * hanya misi yang masih bisa dikerjakan.
+     * jawabannya sudah masuk dan XP-nya harus tetap aman. Yang ditutup hanya
+     * misi yang masih bisa dikerjakan.
+     *
+     * Kekecualian: kelompok yang masuk terlambat (`late_entry`) tidak dikunci,
+     * supaya murid yang baru bergabung tidak kehilangan kesempatan memulai.
+     *
+     * @param  array<int, int>  $keep  Nomor ronde yang tetap dibuka.
      */
-    protected function closeOtherRounds(GameSession $session, int $currentRound): void
+    protected function closeRoundsExcept(GameSession $session, array $keep): void
     {
         $missionLain = Mission::query()
             ->active()
-            ->where('order', '!=', $currentRound)
+            ->when($keep !== [], fn ($query) => $query->whereNotIn('order', $keep))
             ->pluck('id')
             ->all();
 
@@ -162,78 +294,13 @@ class RoundService
 
     /**
      * Mulai sebuah ronde: buka misinya untuk semua kelompok dan nyalakan timer.
+     *
+     * Ini "mode satu ronde": ronde lain yang sedang terbuka ikut ditutup,
+     * sehingga guru bisa kembali fokus ke satu ronde saja.
      */
     public function start(GameSession $session, int $round, ?int $durationMinutes = null): GameSession
     {
-        $mission = $this->missionForRound($round);
-
-        if (! $mission) {
-            return $session;
-        }
-
-        DB::transaction(function () use ($session, $mission, $round, $durationMinutes) {
-            // Tutup ronde sebelumnya: misi ronde lama tidak boleh dikirim lagi,
-            // supaya siswa tidak bisa mengerjakan ronde lama diam-diam.
-            $this->closePreviousRounds($session, $round);
-
-            $session->update([
-                'current_round' => $round,
-                'round_status' => GameSession::ROUND_RUNNING,
-                'round_started_at' => now(),
-                'round_duration_minutes' => $durationMinutes ?? $session->round_duration_minutes,
-                // Kunci lobby agar kelompok baru tidak masuk di tengah ronde.
-                'lobby_locked' => true,
-            ]);
-
-            // Buka misi ronde ini untuk SEMUA kelompok di sesi.
-            foreach ($session->teams as $team) {
-                $this->missions->unlockManually($team, $mission);
-            }
-        });
-
-        return $session->refresh();
-    }
-
-    /**
-     * Tutup misi ronde-ronde lama (nomor lebih kecil dari ronde saat ini).
-     *
-     * Misi yang sudah selesai / menunggu validasi TIDAK diubah, karena
-     * jawabannya sudah masuk dan tetap tersimpan. Yang ditutup hanya misi
-     * yang masih bisa dikerjakan, agar tidak bisa dikirim setelah ronde lewat.
-     *
-     * Kekecualian: kelompok yang masuk terlambat (`late_entry`) tetap boleh
-     * mengerjakan misi ronde 1, supaya murid yang baru bergabung setelah
-     * permainan berjalan tidak kehilangan kesempatan memulai.
-     */
-    protected function closePreviousRounds(GameSession $session, int $currentRound): void
-    {
-        if ($currentRound <= 1) {
-            return;
-        }
-
-        $missionLama = Mission::query()
-            ->active()
-            ->where('order', '<', $currentRound)
-            ->pluck('id')
-            ->all();
-
-        if ($missionLama === []) {
-            return;
-        }
-
-        TeamProgress::query()
-            ->whereIn('team_id', $session->teams()->select('id'))
-            ->whereIn('mission_id', $missionLama)
-            // Pendatang baru tidak dikunci: mereka baru mulai dari ronde 1.
-            ->where('late_entry', false)
-            ->whereIn('status', [
-                TeamProgress::STATUS_AVAILABLE,
-                TeamProgress::STATUS_IN_PROGRESS,
-            ])
-            ->update([
-                'status' => TeamProgress::STATUS_LOCKED,
-                'work_started_at' => null,
-            ]);
+        return $this->openRounds($session, [$round], $durationMinutes);
     }
 
     /**
@@ -256,12 +323,38 @@ class RoundService
     {
         $session->update([
             'current_round' => 0,
+            'open_rounds' => [],
             'round_status' => GameSession::ROUND_IDLE,
             'round_started_at' => null,
             'lobby_locked' => false,
         ]);
 
         return $session->refresh();
+    }
+
+    /**
+     * Daftar ronde yang sedang terbuka, lengkap dengan judul misinya.
+     *
+     * Dipakai layar proyektor dan halaman sesi guru supaya keduanya menampilkan
+     * daftar yang sama ketika guru membuka beberapa ronde sekaligus.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function openRoundInfo(GameSession $session): array
+    {
+        $peta = $this->missions()
+            ->keyBy(fn (Mission $mission) => (int) $mission->order);
+
+        return array_map(function (int $order) use ($peta) {
+            /** @var Mission|null $mission */
+            $mission = $peta[$order] ?? null;
+
+            return [
+                'order' => $order,
+                'title' => $mission?->title,
+                'is_game' => $mission ? $mission->hasGame() : false,
+            ];
+        }, $session->openRoundNumbers());
     }
 
     /**

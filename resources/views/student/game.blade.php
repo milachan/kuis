@@ -47,9 +47,19 @@
     </div>
 
     {{-- Akar game (data dibaca oleh resources/js/game.js) --}}
+    {{--
+        Data yang dibaca resources/js/game.js.
+        data-round-status & data-mission-order dipakai untuk memantau apakah
+        ronde masih berjalan: bila guru menghentikan ronde atau waktunya habis
+        saat anak masih bermain, hasil permainan langsung dikirim supaya XP-nya
+        tidak hilang.
+    --}}
     <div id="game-root"
          data-game="{{ $mission->game_type }}"
-         data-answer-url="{{ route('student.mission.game.answer', $mission) }}">
+         data-answer-url="{{ route('student.mission.game.answer', $mission) }}"
+         data-round-status="{{ route('student.round.status') }}"
+         data-mission-id="{{ $mission->id }}"
+         data-mission-order="{{ $mission->order }}">
 
         <script type="application/json" id="game-questions">@json($questions)</script>
 
@@ -90,9 +100,88 @@
                     <div class="tik-game-layout">
                         {{-- Kolom kiri: papan permainan --}}
                         <div class="tik-game-board">
-                            <canvas id="game-canvas"
-                                    class="w-full rounded-2xl border-2 border-sky-100 bg-sky-50"
-                                    style="aspect-ratio: 720 / 420; touch-action: none;"></canvas>
+                            {{--
+                                Papan permainan + PAPAN HASIL.
+
+                                Papan hasil menutupi PAPAN PERMAINAN saja (bukan
+                                seluruh layar). Papan itu sudah terlihat anak
+                                sejak mulai bermain, jadi hasilnya muncul tepat
+                                di depan mata mereka — tanpa perlu menggulir.
+
+                                Tombol utamanya mengarahkan ke SOAL URAIAN ronde
+                                ini (dinilai AI), karena permainan saja belum
+                                menyelesaikan misi.
+                            --}}
+                            <div class="tik-papan">
+                                <canvas id="game-canvas"
+                                        class="w-full rounded-2xl border-2 border-sky-100 bg-sky-50"
+                                        style="aspect-ratio: 720 / 420; touch-action: none;"></canvas>
+
+                                {{-- Kelas tik-hasil WAJIB ada: tanpa itu elemen ini
+                                     tidak menjadi lapisan di atas papan, melainkan
+                                     jatuh mengalir di BAWAH kanvas. --}}
+                                <div id="game-hasil" class="tik-hasil" hidden>
+                                    {{-- Konfeti punya lapisannya sendiri agar tidak
+                                         menggeser tata letak kartu hasil. --}}
+                                    <div id="hasil-konfeti" class="tik-konfeti-lapis"></div>
+
+                                    {{-- Kartu hasil dibuat RINGKAS: tingginya harus
+                                         muat di dalam papan permainan supaya tidak
+                                         perlu digulir. --}}
+                                    <div class="tik-hasil-kartu rounded-3xl border-2 border-mint-400/40 bg-white p-4 shadow-2xl">
+                                        <p id="hasil-bintang" class="text-3xl">⭐</p>
+                                        <p id="hasil-judul" class="mt-0.5 text-lg font-black text-mint-600">
+                                            Ronde Selesai!
+                                        </p>
+
+                                        <div class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                            <div class="rounded-2xl border-2 border-sky-100 bg-sky-50 px-2 py-1.5">
+                                                <p class="text-[10px] font-bold uppercase tracking-wider text-ink-500">Jawaban Benar</p>
+                                                <p id="hasil-benar" class="text-base font-black text-ink-800">0</p>
+                                            </div>
+                                            <div class="rounded-2xl border-2 border-sky-100 bg-sky-50 px-2 py-1.5">
+                                                <p class="text-[10px] font-bold uppercase tracking-wider text-ink-500">Akurasi</p>
+                                                <p id="hasil-akurasi" class="text-base font-black text-ink-800">0%</p>
+                                            </div>
+                                            <div class="rounded-2xl border-2 border-sky-100 bg-sky-50 px-2 py-1.5">
+                                                <p class="text-[10px] font-bold uppercase tracking-wider text-ink-500">Skor Main</p>
+                                                <p id="hasil-skor" class="text-base font-black text-ink-800">0</p>
+                                            </div>
+                                            <div class="rounded-2xl border-2 border-sun-400/40 bg-sun-300/20 px-2 py-1.5">
+                                                <p class="text-[10px] font-bold uppercase tracking-wider text-ink-500">XP Ronde Ini</p>
+                                                <p id="hasil-xp" class="text-base font-black text-ink-800">…</p>
+                                            </div>
+                                        </div>
+
+                                        <p id="hasil-xp-rincian" class="mt-2 text-[11px] font-semibold leading-snug text-ink-600">
+                                            XP masuk ke total kelompok. Soal uraian menambah XP sampai maksimum misi.
+                                        </p>
+
+                                        <div class="mt-2.5 flex flex-col gap-2 sm:flex-row sm:justify-center">
+                                            <a id="hasil-lanjut"
+                                               href="{{ route('student.mission.show', $mission) }}"
+                                               class="btn-primary justify-center">
+                                                📝 Lanjut Kerjakan Soal Uraian
+                                            </a>
+                                            <button type="button" id="hasil-ulang" class="btn-secondary justify-center">
+                                                🔁 Main Lagi
+                                            </button>
+                                        </div>
+
+                                        <p id="hasil-hitung" class="mt-2 text-[11px] font-black text-grape-500"></p>
+
+                                        <p id="hasil-sebab" class="mt-1 text-[11px] font-semibold text-ink-500"></p>
+
+                                        {{-- Jalan keluar tanpa memulai ulang atau
+                                             menunggu hitungan mundur selesai. --}}
+                                        <button type="button"
+                                                id="hasil-tutup"
+                                                class="mt-0.5 rounded-xl px-3 py-1 text-[11px] font-bold text-ink-500 transition hover:bg-sky-50">
+                                            Tutup hasil
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
 
                             {{-- Pesan permainan --}}
                             <p id="game-pesan"
@@ -152,6 +241,7 @@
                             <div id="soal-pilihan" class="mt-3 space-y-2"></div>
                         </div>
                     </div>
+
                 </div>
 
                 {{-- Cara main --}}
@@ -164,7 +254,8 @@
                         <li>2. Satu anak fokus menjaga nyawa (pakai keyboard), yang lain cari jawaban.</li>
                         <li>3. Pilih jawaban benar agar tenaga &amp; skor bertambah.</li>
                         <li>4. Jawaban <strong>salah</strong> mengurangi nyawa.</li>
-                        <li>5. Soal selesai dijawab = layar kembali normal.</li>
+                        <li>5. Saat game selesai, papan hasil muncul: tekan <strong>📝 Lanjut Kerjakan Soal Uraian</strong>
+                            (otomatis pindah dalam 10 detik, atau <strong>🔁 Main Lagi</strong> untuk mengulang).</li>
                     </ul>
                 </div>
 

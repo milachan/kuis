@@ -36,6 +36,11 @@ class TeamService
 
             $this->missions->initializeProgress($team);
 
+            // Kelompok yang bergabung di tengah permainan (guru membuka lobi)
+            // langsung mendapat semua ronde yang sedang terbuka supaya bisa ikut
+            // bermain bersama kelas, bukan hanya berhasil masuk lalu terkunci.
+            $this->missions->openActiveRounds($team, $session);
+
             return $team;
         });
     }

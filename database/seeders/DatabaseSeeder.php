@@ -15,7 +15,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->seedTeacher();
 
-        // Materi penuh Bab 3: 10 ronde + sesi demo + kode rahasia.
+        // Materi penuh Bab 3: 10 ronde + sesi demo.
         $this->call(Bab3MateriSeeder::class);
 
         // Buat file praktik awal untuk siswa (butuh ekstensi PHP "zip").

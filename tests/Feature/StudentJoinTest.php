@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\GameSession;
 use App\Models\Mission;
-use App\Models\MissionCode;
 use App\Models\Team;
 use App\Models\TeamProgress;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -219,33 +218,6 @@ class StudentJoinTest extends TestCase
         $response = $this->get('/student/dashboard');
 
         $response->assertRedirect(route('student.join'));
-    }
-
-    public function test_halaman_siswa_tidak_membocorkan_kode_rahasia(): void
-    {
-        $this->seedBasics();
-
-        // Sisipkan kode rahasia untuk misi 1.
-        $session = GameSession::query()->firstOrFail();
-        $mission = Mission::query()->where('order', 1)->firstOrFail();
-
-        MissionCode::query()->create([
-            'game_session_id' => $session->id,
-            'mission_id' => $mission->id,
-            'code' => 'SUPERRAHASIA',
-        ]);
-
-        $this->post('/student/join', [
-            'code' => 'TIK8-TEST',
-            'team_name' => 'Kelompok 1',
-            'members' => ['Ana'],
-        ]);
-
-        // Halaman dashboard.
-        $this->get('/student/dashboard')->assertDontSee('SUPERRAHASIA');
-
-        // Halaman misi.
-        $this->get('/student/mission/'.$mission->id)->assertDontSee('SUPERRAHASIA');
     }
 
     public function test_token_kelompok_tidak_dapat_dipalsukan(): void

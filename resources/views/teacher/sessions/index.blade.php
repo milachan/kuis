@@ -2,7 +2,7 @@
 
 @section('title', 'Sesi')
 @section('page-title', 'Sesi Permainan')
-@section('page-subtitle', 'Kelola sesi, kode, timer, dan kode rahasia misi')
+@section('page-subtitle', 'Kelola sesi, kode, dan timer')
 
 @section('page-actions')
     <a href="{{ route('teacher.sessions.create') }}" class="btn-primary">+ Buat Sesi Baru</a>

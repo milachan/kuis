@@ -138,16 +138,77 @@
         // ---------------------------------------------------------------
         // Status ronde
         // ---------------------------------------------------------------
+        // Daftar ronde yang sedang terbuka (dipakai bila guru membuka beberapa
+        // ronde sekaligus). Dibuat lewat DOM node supaya judul misi aman.
+        function renderOpenRounds(list) {
+            const box = el('scr-open-rounds');
+            const listEl = el('scr-open-rounds-list');
+
+            if (!box || !listEl) return;
+
+            listEl.innerHTML = '';
+
+            if (!list || list.length <= 1) {
+                box.classList.add('hidden');
+                return;
+            }
+
+            box.classList.remove('hidden');
+
+            list.forEach((r) => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center gap-3 rounded-xl border border-cyan-accent/20 bg-cyan-strong/5 px-4 py-3';
+
+                const order = document.createElement('span');
+                order.className = 'font-mono text-lg font-black text-cyan-accent';
+                order.textContent = String(r.order);
+
+                const title = document.createElement('span');
+                title.className = 'min-w-0 flex-1 truncate text-sm font-bold text-white';
+                title.textContent = r.title || 'Misi tanpa judul';
+
+                item.appendChild(order);
+                item.appendChild(title);
+
+                if (r.is_game) {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge shrink-0 bg-grape-400/20 text-grape-400 text-[10px]';
+                    badge.textContent = '🎮 GAME';
+                    item.appendChild(badge);
+                }
+
+                listEl.appendChild(item);
+            });
+        }
+
         function renderRound(data) {
             const round = data.round || {};
+            const openRounds = round.open_rounds || [];
+            const multi = openRounds.length > 1;
 
             const roundEl = el('scr-round');
             if (roundEl) {
-                roundEl.textContent = round.current > 0 ? round.current : '—';
+                // Beberapa ronde terbuka: angka besar menjadi jumlah ronde yang
+                // terbuka, bukan nomor satu ronde saja.
+                roundEl.textContent = multi
+                    ? openRounds.length
+                    : (round.current > 0 ? round.current : '—');
             }
 
+            const roundLabel = el('scr-round-label');
+            if (roundLabel) {
+                roundLabel.textContent = multi ? 'Ronde Terbuka' : 'Ronde';
+            }
+
+            renderOpenRounds(openRounds);
+
             const timerBox = el('scr-timer-box');
+            const timerNote = el('scr-timer-note');
             const badge = el('scr-round-badge');
+
+            // Timer kelas hanya bermakna bila tepat satu ronde dibuka.
+            if (timerBox) timerBox.classList.toggle('hidden', multi);
+            if (timerNote) timerNote.classList.toggle('hidden', !multi);
 
             if (badge) {
                 const map = {
@@ -184,11 +245,11 @@
 
             // Timer: mulai ulang hanya bila ronde/status berubah, agar hitungan
             // lokal yang halus tidak dipotong setiap polling.
-            const key = `${round.current}-${round.status}-${round.duration_minutes}`;
+            const key = `${round.current}-${round.status}-${round.duration_minutes}-${openRounds.map((r) => r.order).join('.')}`;
             if (key !== lastRoundKey) {
                 lastRoundKey = key;
-                startCountdown(round.is_running ? round.seconds_remaining : null);
-            } else if (round.is_running && remaining !== null && round.seconds_remaining !== null) {
+                startCountdown(round.is_running && !multi ? round.seconds_remaining : null);
+            } else if (round.is_running && !multi && remaining !== null && round.seconds_remaining !== null) {
                 // Sinkronkan kembali bila selisih melebihi 2 detik (mis. laptop sleep).
                 if (Math.abs(round.seconds_remaining - remaining) > 2) {
                     startCountdown(round.seconds_remaining);

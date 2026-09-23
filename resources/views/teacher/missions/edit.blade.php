@@ -90,18 +90,9 @@
                 </div>
 
                 <div class="panel p-5">
-                    <h2 class="mb-4 text-sm font-bold uppercase tracking-wider text-white/70">Kode & Refleksi</h2>
+                    <h2 class="mb-4 text-sm font-bold uppercase tracking-wider text-white/70">Refleksi</h2>
 
                     <div class="space-y-4">
-                        <div>
-                            <label for="code_prompt" class="label-field">Pertanyaan Kode Rahasia</label>
-                            <textarea id="code_prompt" name="code_prompt" rows="2"
-                                      class="input-field resize-y">{{ old('code_prompt', $mission->code_prompt) }}</textarea>
-                            <p class="mt-1 text-xs text-white/40">
-                                Kode rahasia sendiri diatur per sesi pada menu Sesi.
-                            </p>
-                        </div>
-
                         <div>
                             <label for="reflection_question" class="label-field">Pertanyaan Refleksi (opsional)</label>
                             <textarea id="reflection_question" name="reflection_question" rows="2"

@@ -89,7 +89,7 @@
         <h2 class="mb-3 text-sm font-bold uppercase tracking-wider text-white/70">📌 Alur Cepat</h2>
         <ol class="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             @foreach ([
-                ['1', 'Buat Sesi', 'Atur kode sesi, timer, dan kode rahasia tiap ronde.'],
+                ['1', 'Buat Sesi', 'Atur kode sesi dan timer tiap ronde.'],
                 ['2', 'Bagikan Kode', 'Siswa masuk memakai kode sesi + nama kelompok.'],
                 ['3', 'Jalankan Ronde', 'Buka Layar Proyektor, lalu tekan Mulai Ronde.'],
                 ['4', 'Periksa Jawaban', 'Lihat skor AI & hasil game, lalu Lulus atau minta perbaikan.'],

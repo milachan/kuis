@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'order', 'title', 'slug', 'game_type', 'difficulty', 'story', 'objective', 'instructions',
-    'code_prompt', 'hint_1', 'hint_2', 'reflection_question', 'questions', 'game_questions', 'xp',
+    'hint_1', 'hint_2', 'reflection_question', 'questions', 'game_questions', 'xp',
     'requires_pdf', 'is_active',
 ])]
 class Mission extends Model
@@ -30,11 +30,6 @@ class Mission extends Model
     // ---------------------------------------------------------------------
     // Relasi
     // ---------------------------------------------------------------------
-
-    public function codes(): HasMany
-    {
-        return $this->hasMany(MissionCode::class);
-    }
 
     public function progress(): HasMany
     {

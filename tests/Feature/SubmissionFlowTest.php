@@ -4,12 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\GameSession;
 use App\Models\Mission;
-use App\Models\MissionCode;
 use App\Models\Submission;
 use App\Models\Team;
 use App\Models\TeamProgress;
 use App\Models\User;
-use App\Services\MissionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -52,7 +50,6 @@ class SubmissionFlowTest extends TestCase
                 'story' => 'Cerita '.$order,
                 'objective' => 'Tujuan '.$order,
                 'instructions' => ['Langkah 1'],
-                'code_prompt' => 'Masukkan kode',
                 'hint_1' => 'Petunjuk pertama',
                 'hint_2' => 'Petunjuk kedua',
                 'reflection_question' => 'Apa yang kamu pelajari?',
@@ -446,19 +443,26 @@ class SubmissionFlowTest extends TestCase
 
     public function test_siswa_tidak_dapat_mengirim_setelah_waktu_habis(): void
     {
-        // Sesi 30 menit, dimulai 1 jam lalu → waktu habis.
+        // Sesi 30 menit yang jam kelasnya baru berjalan.
         $this->session->update([
             'duration_minutes' => 30,
-            'start_time' => now()->subHour(),
+            'start_time' => now(),
         ]);
 
-        // Masuk sebelum waktu habis dicek (join tetap boleh).
         $team = $this->joinStudent();
         $mission = Mission::query()->where('order', 1)->firstOrFail();
 
+        // Kelompok sudah mulai mengerjakan ronde ini SEBELUM jam kelas habis.
+        // Hanya kondisi ini yang boleh terkunci: kalau mereka baru mulai setelah
+        // jam kelas lewat (mis. murid terlambat), mereka punya jatah waktu sendiri.
+        $this->get('/student/mission/'.$mission->id);
+
+        // Lewati batas waktu sesi.
+        $this->travel(31)->minutes();
+
         $response = $this->from('/student/mission/'.$mission->id)
             ->post('/student/mission/'.$mission->id.'/submit', [
-                'evidence' => UploadedFile::fake()->image('bukti.png'),
+                'answer' => 'Jawaban yang dikirim setelah jam kelas habis.',
             ]);
 
         $response->assertSessionHas('error');
@@ -485,6 +489,8 @@ class SubmissionFlowTest extends TestCase
             'start_time' => now()->subHour(),
         ]);
 
+        $this->assertTrue($this->session->fresh()->isTimeUp());
+
         // Kiriman lama tetap ada.
         $this->assertSame(1, Submission::query()->count());
     }
@@ -501,28 +507,5 @@ class SubmissionFlowTest extends TestCase
 
         $response->assertSessionHas('error');
         $this->assertDatabaseCount('teams', 0);
-    }
-
-    // -----------------------------------------------------------------
-    // KODE RAHASIA
-    // -----------------------------------------------------------------
-
-    public function test_kode_rahasia_benar_dan_salah_sesuai_harapan(): void
-    {
-        $team = $this->joinStudent();
-        $mission = Mission::query()->where('order', 1)->firstOrFail();
-
-        MissionCode::query()->create([
-            'game_session_id' => $this->session->id,
-            'mission_id' => $mission->id,
-            'code' => 'FORMAT',
-        ]);
-
-        $service = app(MissionService::class);
-
-        $this->assertTrue($service->verifyCode($this->session, $mission, 'FORMAT'));
-        $this->assertTrue($service->verifyCode($this->session, $mission, 'format'));
-        $this->assertTrue($service->verifyCode($this->session, $mission, ' format '));
-        $this->assertFalse($service->verifyCode($this->session, $mission, 'SALAH'));
     }
 }

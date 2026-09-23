@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\GameSession;
 use App\Models\Mission;
 use App\Models\Submission;
 use App\Models\Team;
@@ -96,13 +95,6 @@ class Bab3MateriTest extends TestCase
             $this->assertGreaterThanOrEqual(1, $mission->questionCount());
             $this->assertLessThanOrEqual(2, $mission->questionCount());
         }
-    }
-
-    public function test_setiap_ronde_punya_kode_rahasia_di_sesi_demo(): void
-    {
-        $session = GameSession::query()->where('code', 'TIK8-DEMO')->firstOrFail();
-
-        $this->assertSame(7, $session->missionCodes()->count());
     }
 
     public function test_materi_mencakup_komponen_dan_heksadesimal(): void

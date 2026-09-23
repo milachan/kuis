@@ -13,20 +13,20 @@ Prinsip utama: **AI boleh membantu mencari langkah, tetapi praktik tetap dilakuk
 
 | Area | Fitur |
 | --- | --- |
-| **Guru/Admin** | Login, buat sesi, atur timer, kode rahasia per misi, kelola kelompok, validasi bukti, lulus/perbaikan, XP, laporan, export CSV, reset progres, akhiri sesi, kelola misi |
-| **Siswa** | Masuk dengan **kode sesi + nama kelompok**, lihat misi, baca instruksi, petunjuk, unggah bukti, input kode rahasia, timer, XP, progres |
+| **Guru/Admin** | Login, buat sesi, atur timer, kelola kelompok, validasi bukti, lulus/perbaikan, XP, laporan, export CSV, reset progres, akhiri sesi, kelola misi |
+| **Siswa** | Masuk dengan **kode sesi + nama kelompok**, lihat misi, baca instruksi, petunjuk, unggah bukti, timer, XP, progres |
 | **Sistem Misi** | 4 misi utama + 1 final mission, status kunci otomatis (LOCKED → AVAILABLE → IN PROGRESS → WAITING VALIDATION → COMPLETED) |
-| **Keamanan** | CSRF, whitelist upload, random filename, bcrypt, role authorization, kode rahasia tidak pernah dikirim ke klien |
+| **Keamanan** | CSRF, whitelist upload, random filename, bcrypt, role authorization |
 
 ### Daftar Misi
 
-| # | Misi | Fokus Materi | Kode Default |
-| --- | --- | --- | --- |
-| 1 | Operasi Format | Page, paragraph, header/footer, formatting, Save As | `FORMAT` |
-| 2 | Operasi Clipboard | Cut, Copy, Paste, clipboard antar-aplikasi | `CLIP` |
-| 3 | Screenshot Investigator | Screenshot, Snipping Tool, area selection | `SNIP` |
-| 4 | Operasi Laporan | Menggabungkan teks, tabel, gambar jadi laporan; PDF | `REPORT` |
-| 5 | Final Mission — Virtual Lab | Digital content, input-process-output | `DIGITAL` |
+| # | Misi | Fokus Materi |
+| --- | --- | --- |
+| 1 | Operasi Format | Page, paragraph, header/footer, formatting, Save As |
+| 2 | Operasi Clipboard | Cut, Copy, Paste, clipboard antar-aplikasi |
+| 3 | Screenshot Investigator | Screenshot, Snipping Tool, area selection |
+| 4 | Operasi Laporan | Menggabungkan teks, tabel, gambar jadi laporan; PDF |
+| 5 | Final Mission — Virtual Lab | Digital content, input-process-output |
 
 ---
 
@@ -62,10 +62,10 @@ app/
 │       ├── EnsureTeacher.php              # hanya guru
 │       └── EnsureStudentTeam.php          # hanya siswa yang sudah masuk
 ├── Models/                        # User, GameSession, Mission, Team,
-│                                  # TeamMember, MissionCode, TeamProgress, Submission
+│                                  # TeamMember, TeamProgress, Submission
 ├── Providers/AppServiceProvider.php
 └── Services/
-    ├── MissionService.php         # kunci/buka misi, kode rahasia
+    ├── MissionService.php         # kunci/buka misi
     ├── SubmissionService.php      # upload & simpan bukti
     ├── ScoringService.php         # XP, bonus, penalti petunjuk
     ├── StudentAuthService.php     # identitas kelompok berbasis token
@@ -102,10 +102,8 @@ users              id, name, email, password, role, timestamps
 game_sessions      id, code(unique), name, duration_minutes, start_time, end_time,
                    status, leaderboard_enabled, hints_enabled, is_demo, timestamps
 missions           id, order(unique), title, slug(unique), difficulty, story, objective,
-                   instructions(json), code_prompt, hint_1, hint_2, reflection_question,
+                   instructions(json), hint_1, hint_2, reflection_question,
                    xp, requires_pdf, is_active, timestamps
-mission_codes      id, game_session_id→, mission_id→, code, timestamps
-                   UNIQUE(game_session_id, mission_id)
 teams              id, game_session_id→, name, token(unique,64), xp, started_at,
                    completed_at, timestamps   UNIQUE(game_session_id, name)
 team_members       id, team_id→, name, timestamps
@@ -120,7 +118,6 @@ submissions        id, team_id→, mission_id→, answer, evidence_path, file_pa
 **Relasi kunci**
 - `game_sessions` 1—N `teams` 1—N `team_members`
 - `teams` N—M `missions` melalui `team_progress`
-- `mission_codes` menyimpan kode rahasia **per sesi per misi** (siswa tidak bisa menyontek antar sesi)
 
 **Status misi** (`team_progress.status`): `locked`, `available`, `in_progress`, `waiting_validation`, `completed`
 
@@ -133,8 +130,6 @@ submissions        id, team_id→, mission_id→, answer, evidence_path, file_pa
 | **Guru** | `admin@example.com` / `password` |
 | **Sesi demo** | Kode: `TIK8-DEMO` (timer 60 menit, petunjuk aktif) |
 | **Siswa** | Cukup kode sesi + nama kelompok + nama anggota (tanpa akun) |
-
-Kode rahasia sesi demo: `FORMAT`, `CLIP`, `SNIP`, `REPORT`, `DIGITAL`.
 
 > **Ganti password guru** sebelum dipakai sungguhan:
 > `php artisan tinker --execute="\App\Models\User::where('email','admin@example.com')->update(['password'=>bcrypt('PASSWORD-BARU')]);"`
@@ -205,14 +200,14 @@ Hasil saat ini: **46 test, 140 assertion, semuanya lulus.**
 
 Cakupan test: login guru, authorization role, masuk kode sesi, penguncian misi,
 upload bukti, validasi file (ekstensi & ukuran), validasi guru, XP, petunjuk,
-timer, kode rahasia, dan export CSV.
+timer, dan export CSV.
 
 ---
 
 ## 8. Cara Reset Data Demo
 
 ```powershell
-# Reset sesi demo (hapus kelompok + bukti, timer mulai ulang, kode tetap)
+# Reset sesi demo (hapus kelompok + bukti, timer mulai ulang)
 & "C:\laragon\bin\php\php-8.3.30-Win32-vs16-x64\php.exe" artisan tik:reset-demo
 
 # Hapus SEMUA sesi dan kelompok (diminta konfirmasi)
@@ -228,7 +223,7 @@ timer, kode rahasia, dan export CSV.
 ### Demo Mode untuk Guru
 
 1. Login guru → **Sesi** → sesi `TIK8-DEMO` sudah siap pakai.
-2. Buka sesi → lihat **kode rahasia** tiap misi.
+2. Buka sesi, lalu **Jalankan Ronde** dari layar proyektor.
 3. Buka jendela browser lain (mode incognito) → `http://127.0.0.1:8000/student/join`.
 4. Masuk dengan `TIK8-DEMO` + nama kelompok bebas.
 5. Selesaikan misi, unggah bukti, lalu validasi dari panel guru.
@@ -244,8 +239,6 @@ timer, kode rahasia, dan export CSV.
 2. Klik **Edit Misi**.
 3. Ubah judul, cerita, tujuan, **instruksi (satu langkah per baris)**, XP, dan petunjuk.
 4. Simpan.
-
-Kode rahasia **tidak** diubah di sini — kode diatur **per sesi** di menu **Sesi → Edit Sesi**.
 
 ### B. Menambah misi baru
 
@@ -264,7 +257,6 @@ Tambahkan entri ke array `$missions` di `database/seeders/DatabaseSeeder.php`:
         'Langkah praktik pertama.',
         'Langkah praktik kedua.',
     ],
-    'code_prompt' => 'Masukkan kode rahasia yang kamu temukan.',
     'hint_1' => 'Petunjuk pertama (arahan, bukan jawaban).',
     'hint_2' => 'Petunjuk kedua (shortcut atau cara spesifik).',
     'reflection_question' => 'Pertanyaan refleksi singkat.',
@@ -272,7 +264,6 @@ Tambahkan entri ke array `$missions` di `database/seeders/DatabaseSeeder.php`:
 ],
 ```
 
-Tambahkan juga kode defaultnya di `MissionService::generateCodes()` (array `$defaults`),
 lalu jalankan:
 
 ```powershell
@@ -555,7 +546,6 @@ GURU
 - **Random filename**: `{32-char-random}_{nama-aman}.{ext}` mencegah tabrakan & path traversal
 - **Sanitasi nama file**: hanya huruf/angka/dash/underscore
 - **Role authorization**: middleware `teacher` & `student`; siswa tidak bisa membuka `/teacher`
-- **Kode rahasia tidak bocor**: hanya diambil di controller guru; diverifikasi server-side; tidak pernah dirender di halaman siswa (sudah diuji otomatis)
 - **Identitas siswa**: token 64 karakter di DB + verifikasi `hash_equals`; token palsu langsung ditolak
 - **Status misi server-side**: siswa tidak bisa mengubah status via request manual (diverifikasi ulang di controller + test otomatis)
 - **Password**: bcrypt (Laravel default), tidak pernah plaintext

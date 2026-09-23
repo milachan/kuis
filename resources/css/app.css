@@ -215,12 +215,106 @@
     animation: tik-bob 2.4s ease-in-out infinite;
 }
 
+/* -----------------------------------------------------------------------
+| Perayaan akhir ronde game
+| -----------------------------------------------------------------------
+| Papan hasil (lihat student/game.blade.php) muncul dengan animasi, dan
+| konfeti dibuat dari <span> oleh resources/js/game.js — tanpa pustaka luar,
+| supaya ringan untuk komputer lab yang dipakai bersama.
+*/
+/*
+| Lapisan papan hasil. Ditulis sebagai satu blok dengan display:flex, jadi
+| visibilitasnya dikendalikan lewat atribut "hidden" (di-set dari JS) dan
+| aturan [hidden] di bawah — bukan lewat kelas utility, supaya tidak bentrok
+| dengan display:flex milik lapisan ini.
+*/
+/*
+| Pembungkus papan permainan: acuan posisi papan hasil.
+| min-height dipakai agar kotaknya tetap cukup tinggi untuk kartu hasil
+| walaupun kanvasnya pendek (mis. layar ponsel).
+*/
+.tik-papan {
+    position: relative;
+    /* Cukup tinggi untuk memuat kartu hasil tanpa perlu digulir. */
+    min-height: 24rem;
+}
+
+/*
+| Papan hasil menutupi PAPAN PERMAINAN, bukan seluruh layar: papan itu sudah
+| dilihat anak sejak mulai bermain, jadi hasilnya muncul tepat di depan mata
+| mereka tanpa perlu menggulir halaman.
+|
+| margin:auto pada flex + overflow-y membuat kartu terpusat, dan tetap utuh
+| (lapisannya yang bergulir) bila layarnya sangat pendek.
+*/
+.tik-hasil {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    overflow-y: auto;
+    padding: 0.5rem;
+    border-radius: 1rem;
+    background: rgba(15, 23, 42, 0.72);
+}
+
+.tik-hasil[hidden] {
+    display: none;
+}
+
+.tik-hasil-kartu {
+    margin: auto;
+    width: 100%;
+    max-width: 30rem;
+    /* Tidak boleh lebih tinggi dari papan: kalau layarnya sangat pendek,
+       kartunya sendiri yang bergulir — tetap di dalam papan. */
+    max-height: 100%;
+    overflow-y: auto;
+    text-align: center;
+    animation: tik-fade-up 0.3s ease-out both;
+}
+
+/* Lapisan konfeti: di atas latar gelap, tidak menghalangi klik tombol. */
+.tik-konfeti-lapis {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+@keyframes tik-confetti-jatuh {
+    0% {
+        opacity: 1;
+        transform: translateY(-14px) rotate(0deg);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(340px) rotate(540deg);
+    }
+}
+
+.tik-confetti {
+    position: absolute;
+    top: 0;
+    width: 9px;
+    height: 14px;
+    border-radius: 2px;
+    pointer-events: none;
+    animation: tik-confetti-jatuh 2.4s linear forwards;
+}
+
 /* Hormati preferensi pengguna yang sensitif terhadap gerakan */
 @media (prefers-reduced-motion: reduce) {
     .animate-fade-up,
     .animate-pulse-ring,
-    .animate-bob {
+    .animate-bob,
+    .tik-hasil-kartu {
         animation: none;
+    }
+
+    /* Konfeti tidak berguna tanpa gerakan, jadi disembunyikan sama sekali. */
+    .tik-confetti {
+        display: none;
     }
 }
 

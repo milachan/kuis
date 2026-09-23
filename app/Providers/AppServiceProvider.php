@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Models\Submission;
+use App\Models\Team;
+use App\Services\MissionService;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -27,6 +29,20 @@ class AppServiceProvider extends ServiceProvider
             $view->with(
                 'pendingValidationCount',
                 Submission::query()->where('status', Submission::STATUS_WAITING)->count()
+            );
+        });
+
+        // Semua halaman siswa memerlukan daftar ronde yang sedang terbuka untuk
+        // bilah "Pindah Ronde" di header. Dihitung sekali per halaman, dari
+        // kelompok yang sudah dioper controller ke view.
+        View::composer('layouts.student', function ($view) {
+            $team = $view->getData()['team'] ?? null;
+
+            $view->with(
+                'roundNav',
+                $team instanceof Team
+                    ? app(MissionService::class)->roundChoices($team)
+                    : collect()
             );
         });
     }

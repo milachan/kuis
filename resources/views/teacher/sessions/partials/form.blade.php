@@ -1,6 +1,6 @@
 {{--
     Form sesi, dipakai bersama oleh halaman "create" dan "edit".
-    Variabel: $session (nullable), $durationOptions, $missionList, $codes (untuk edit)
+    Variabel: $session (nullable), $durationOptions, $missionList
 --}}
 @php
     $isEdit = isset($session) && $session->exists;
@@ -61,6 +61,11 @@
                             </option>
                         @endforeach
                     </select>
+                    <p class="mt-1 text-xs text-white/50">
+                        Jam ini mulai berjalan saat kamu membuka ronde pertama, bukan saat sesi dibuat —
+                        jadi waktu persiapan kelas tidak ikut terhitung. Bisa ditambah atau dimatikan
+                        kapan saja dari halaman sesi.
+                    </p>
                     @error('duration_minutes')
                         <p class="mt-1 text-xs text-rose-300">{{ $message }}</p>
                     @enderror
@@ -99,31 +104,6 @@
                 </div>
             </div>
         </div>
-
-        {{-- Kode rahasia (hanya saat edit) --}}
-        @if ($isEdit)
-            <div class="panel p-5">
-                <h2 class="mb-1 text-sm font-bold uppercase tracking-wider text-gold">🔑 Kode Rahasia Tiap Misi</h2>
-                <p class="mb-4 text-xs text-white/50">
-                    Kode ini tidak pernah dikirim ke halaman siswa. Ubah bila perlu agar antar-sesi berbeda.
-                </p>
-
-                <div class="space-y-3">
-                    @foreach ($missionList as $mission)
-                        <div class="flex items-center gap-3">
-                            <label class="min-w-0 flex-1 text-sm text-white/80" for="code-{{ $mission->id }}">
-                                <span class="block truncate">{{ $mission->title }}</span>
-                            </label>
-                            <input id="code-{{ $mission->id }}"
-                                   type="text"
-                                   name="codes[{{ $mission->id }}]"
-                                   value="{{ old('codes.'.$mission->id, $codes[$mission->id] ?? '') }}"
-                                   class="input-field w-40 text-center font-mono text-sm font-bold uppercase tracking-wider">
-                        </div>
-                    @endforeach
-                </div>
-            </div>
-        @endif
     </div>
 
     {{-- Kolom kanan: ringkasan misi --}}
@@ -143,8 +123,7 @@
                 @endforelse
             </ol>
             <p class="mt-4 text-xs text-white/40">
-                Misi dikelola di menu <strong>Misi</strong>. Kode rahasia dibuat otomatis dengan
-                nilai default saat sesi dibuat.
+                Misi dikelola di menu <strong>Misi</strong>.
             </p>
         </div>
 

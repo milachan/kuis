@@ -72,7 +72,7 @@
 
                 {{-- Ronde + timer besar --}}
                 <div class="text-right">
-                    <p class="text-sm uppercase tracking-widest text-white/50">Ronde</p>
+                    <p id="scr-round-label" class="text-sm uppercase tracking-widest text-white/50">Ronde</p>
                     <p class="font-black leading-none">
                         <span id="scr-round" class="text-6xl sm:text-7xl">{{ $currentRound > 0 ? $currentRound : '—' }}</span>
                         <span class="text-2xl text-white/30 sm:text-3xl">/ {{ $totalRounds }}</span>
@@ -91,6 +91,12 @@
                     <p id="scr-timer" class="font-mono text-6xl font-black tabular-nums sm:text-8xl">--:--</p>
                 </div>
                 <div id="scr-round-badge" class="badge px-4 py-2 text-base bg-white/5 text-white/60">MENUNGGU</div>
+
+                {{-- Muncul bila guru membuka beberapa ronde sekaligus. --}}
+                <p id="scr-timer-note" class="hidden max-w-[15rem] text-center text-xs font-semibold text-gold">
+                    Timer kelas nonaktif karena beberapa ronde terbuka sekaligus.
+                    Tiap kelompok bekerja sesuai waktunya sendiri.
+                </p>
             </div>
 
             {{-- Misi ronde berjalan --}}
@@ -98,6 +104,14 @@
                 <p class="text-xs uppercase tracking-widest text-white/40">Misi Ronde Ini</p>
                 <p id="scr-mission-title" class="mt-1 text-xl font-bold text-white"></p>
                 <p id="scr-mission-objective" class="mt-1 text-sm text-white/50"></p>
+            </div>
+
+            {{-- Daftar ronde yang sedang terbuka (bila lebih dari satu). --}}
+            <div id="scr-open-rounds" class="mt-6 hidden rounded-2xl border border-white/10 bg-navy-950/50 p-4">
+                <p class="text-center text-xs uppercase tracking-[0.3em] text-white/40">
+                    Ronde yang sedang terbuka
+                </p>
+                <div id="scr-open-rounds-list" class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3"></div>
             </div>
 
             {{-- ===================== PAPAN SKOR ===================== --}}
