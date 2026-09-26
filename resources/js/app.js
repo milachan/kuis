@@ -14,6 +14,12 @@
     // -----------------------------------------------------------------
     const SOUND_KEY = 'tik-sound-enabled';
 
+    // Satu AudioContext dipakai bersama untuk semua bunyi. Dulu setiap bunyi
+    // membuat AudioContext baru lalu menutupnya; saat tabrakan sering (game
+    // arcade), membuat/menutup context berulang kali itu mahal dan membuat
+    // gerakan tersendat.
+    let audioCtx = null;
+
     window.TikSound = {
         isEnabled() {
             return localStorage.getItem(SOUND_KEY) === 'on';
@@ -41,7 +47,11 @@
                 const AudioCtx = window.AudioContext || window.webkitAudioContext;
                 if (!AudioCtx) return;
 
-                const ctx = new AudioCtx();
+                // Context bersama: dibuat sekali, lalu dipakai ulang.
+                if (!audioCtx) audioCtx = new AudioCtx();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+
+                const ctx = audioCtx;
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
 
@@ -68,7 +78,8 @@
                 osc.start();
                 osc.stop(ctx.currentTime + duration);
 
-                osc.onended = () => ctx.close();
+                // Context TIDAK ditutup di sini supaya bisa dipakai bunyi
+                // berikutnya; oscillator berhenti sendiri setelah `duration`.
             } catch (e) {
                 // Audio bersifat opsional; abaikan jika browser memblokir.
             }

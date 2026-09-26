@@ -360,17 +360,34 @@ class GameRondeTest extends TestCase
     {
         $js = file_get_contents(resource_path('js/game.js'));
 
-        // Gerak game hanya berjalan bila soal TIDAK sedang terbuka, supaya
+        // Simulasi hanya melangkah bila soal TIDAK sedang terbuka, supaya
         // anak bisa membaca/mendiskusikan soal tanpa karakternya menabrak.
         $this->assertMatchesRegularExpression(
-            '/if \(!soalTerbuka && waktu - waktuLangkah >= intervalLangkah\)/',
+            '/if \(!soalTerbuka\) \{\s*\n\s*akumulasi \+= delta;/',
             $js,
             'loop() harus berhenti melangkah selama soal terbuka.'
         );
 
+        // Jeda beku harus SINGKAT: 2,5 detik dulu membuat permainan terasa
+        // berhenti terus setiap kali ganti soal.
+        $this->assertStringNotContainsString('}, 2500);', $js);
+
         // Dan soal harus menampilkan nomor urut / progres supaya anak tahu
         // masih ada berapa soal lagi.
         $this->assertStringContainsString('dari ', $js);
+    }
+
+    public function test_langkah_game_memakai_akumulator_waktu_tetap(): void
+    {
+        // REGRESI: ambang `waktu - waktuLangkah >= intervalLangkah` menggeser
+        // patokan ke frame terakhir TANPA menyimpan sisa waktu, sehingga di
+        // monitor 120/144 Hz langkah tidak segaris dengan frame — gerakan
+        // patah-patah dan input terasa telat di PC baru.
+        $js = file_get_contents(resource_path('js/game.js'));
+
+        $this->assertStringNotContainsString('waktu - waktuLangkah >=', $js);
+        $this->assertStringContainsString('akumulasi += delta;', $js);
+        $this->assertStringContainsString('akumulasi -= intervalLangkah;', $js);
     }
 
     public function test_permainan_tidak_beku_terus_menerus(): void

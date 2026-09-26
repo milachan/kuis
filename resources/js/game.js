@@ -513,13 +513,20 @@
         let tumpukan = [];
         let tungguJawab = false;
         let loopId = null;
-        let waktuLangkah = 0;
+
+        // Simulasi memakai akumulator langkah waktu-tetap. Cara lama
+        // menggeser patokan waktu ke frame terakhir tanpa menyimpan sisa,
+        // sehingga di monitor ber-refresh tinggi (120/144 Hz) langkah tidak
+        // pernah segaris dengan frame — gerakan jadi patah-patah dan input
+        // terasa telat.
+        let waktuSebelumnya = null;
+        let akumulasi = 0;
 
         // Hitung mundur "berpindah ke soal uraian" setelah ronde selesai.
         let hitungId = null;
 
-        // Interval langkah per jenis game (ms).
-        const intervalLangkah = jenis === 'snake' ? 130 : 16;
+        // Interval langkah per jenis game (ms). Snake sengaja lebih lambat.
+        const intervalLangkah = jenis === 'snake' ? 130 : 1000 / 60;
 
         function perbaruiStatistik() {
             elNyawa.textContent = '❤️'.repeat(Math.max(0, nyawa)) + '🖤'.repeat(Math.max(0, NYAWA_AWAL - nyawa));
@@ -632,9 +639,10 @@
             soalSekarang = berikutnya;
             nomorSoal += 1;
 
-            // Soal baru terbuka: beri jeda singkat gerak game supaya anak sempat
-            // MEMBACA soal dulu tanpa langsung menabrak. Setelah jeda, game
-            // berjalan lagi — jadi permainan tetap "hidup", bukan beku total.
+            // Soal baru terbuka: beri jeda SINGKAT gerak game supaya anak sempat
+            // membaca soal tanpa langsung menabrak. Jedanya sengaja pendek —
+            // dulu 2,5 detik sehingga permainan terasa berhenti terus tiap ganti
+            // soal. Setelah jeda, game berjalan lagi.
             soalTerbuka = true;
 
             gambarSoal();
@@ -643,7 +651,7 @@
             setTimeout(function () {
                 // Hanya buka beku bila soal ini masih yang sedang aktif.
                 if (soalSekarang === berikutnya) soalTerbuka = false;
-            }, 2500);
+            }, 1200);
         }
 
         // Gambar soal yang sedang aktif beserta tombol pilihannya.
@@ -769,47 +777,73 @@
             }, 900);
         }
 
+        // Satu langkah simulasi beserta penanganan tabrakan/nyawa.
+        // Mengembalikan false bila ronde berhenti, supaya `loop` ikut berhenti.
+        function langkahGame() {
+            const hasil = game.langkah();
+
+            if (hasil !== 'mati' && hasil !== 'jatuh' && hasil !== 'tabrak') {
+                return true;
+            }
+
+            nyawa -= 1;
+            perbaruiStatistik();
+
+            window.TikSound && window.TikSound.play('error');
+
+            // Kehabisan nyawa TIDAK mengakhiri ronde: nyawa diisi ulang,
+            // posisi game direset, dan anak melanjutkan soal yang sama.
+            const simpanSkor = game.skor;
+            game.reset();
+            game.skor = simpanSkor;
+
+            if (nyawa <= 0) {
+                isiUlangNyawa();
+                elPesan.textContent = 'Nyawa habis, diisi ulang. Lanjutkan soal ini.';
+            } else {
+                elPesan.textContent = '⚠️ Hati-hati! Nyawa berkurang (bukan karena jawaban).';
+            }
+
+            elPesan.className = 'text-sm font-black text-sun-500';
+
+            return true;
+        }
+
         function loop(waktu) {
             if (!jalan) return;
 
-            // Langkah game hanya tiap interval (snake lebih lambat), dan TIDAK
-            // berjalan selama sebuah soal terbuka. Ini memberi anak waktu
-            // membaca/mendiskusikan soal tanpa ularnya menabrak.
-            if (!soalTerbuka && waktu - waktuLangkah >= intervalLangkah) {
-                waktuLangkah = waktu;
+            if (waktuSebelumnya === null) waktuSebelumnya = waktu;
 
-                const hasil = game.langkah();
+            // Jarak antar-frame, dibatasi supaya tab yang sempat tidak aktif
+            // (atau soal yang lama terbaca) tidak melompat banyak langkah.
+            let delta = waktu - waktuSebelumnya;
+            waktuSebelumnya = waktu;
 
-                if (hasil === 'mati' || hasil === 'jatuh' || hasil === 'tabrak') {
-                    nyawa -= 1;
-                    perbaruiStatistik();
+            if (delta > 250) delta = 250;
 
-                    window.TikSound && window.TikSound.play('error');
+            // Simulasi HANYA berjalan saat soal tidak terbuka, dan memakai
+            // akumulator: sisa waktu yang belum cukup untuk satu langkah tetap
+            // disimpan untuk frame berikutnya. Dengan begitu kecepatan game
+            // sama di monitor 60 Hz maupun 144 Hz, dan langkah tetap segaris
+            // dengan frame sehingga gerakan halus.
+            if (!soalTerbuka) {
+                akumulasi += delta;
 
-                    // Kehabisan nyawa TIDAK mengakhiri ronde: nyawa diisi ulang,
-                    // posisi game direset, dan anak melanjutkan soal yang sama.
-                    if (nyawa <= 0) {
-                        isiUlangNyawa();
+                // Batasi jumlah langkah per frame agar input tetap responsif.
+                let langkahMaks = 5;
 
-                        const simpanSkor = game.skor;
-                        game.reset();
-                        game.skor = simpanSkor;
-                        elPesan.textContent = 'Nyawa habis, diisi ulang. Lanjutkan soal ini.';
-                        elPesan.className = 'text-sm font-black text-sun-500';
+                while (akumulasi >= intervalLangkah && langkahMaks > 0) {
+                    akumulasi -= intervalLangkah;
+                    langkahMaks -= 1;
 
-                        game.gambar();
-                        loopId = requestAnimationFrame(loop);
-
-                        return;
-                    }
-
-                    // Ulang posisi game, lanjut soal yang sama.
-                    const simpanSkor = game.skor;
-                    game.reset();
-                    game.skor = simpanSkor;
-                    elPesan.textContent = '⚠️ Hati-hati! Nyawa berkurang (bukan karena jawaban).';
-                    elPesan.className = 'text-sm font-black text-sun-500';
+                    if (!langkahGame()) break;
                 }
+
+                // Ketertinggalan yang tak terkejar dibuang, bukan dikejar
+                // beruntun, supaya game tidak "melompat".
+                if (akumulasi > intervalLangkah) akumulasi = 0;
+            } else {
+                akumulasi = 0;
             }
 
             game.gambar();
@@ -844,6 +878,10 @@
             nyawa = NYAWA_AWAL;
             tungguJawab = false;
             soalTerbuka = false;
+
+            // Mulai ronde dari kondisi waktu yang bersih.
+            waktuSebelumnya = null;
+            akumulasi = 0;
 
             if (sesiBaru) {
                 benar = 0;
