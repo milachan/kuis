@@ -390,6 +390,27 @@ class GameRondeTest extends TestCase
         $this->assertStringContainsString('akumulasi -= intervalLangkah;', $js);
     }
 
+    public function test_pilihan_jawaban_memberi_umpan_balik_seketika(): void
+    {
+        // REGRESI: dulu tombol jawaban hanya di-disable TANPA perubahan
+        // tampilan, dan pesan benar/salah hanya muncul di kolom papan yang
+        // jauh dari tombol — anak merasa kliknya tidak masuk lalu menekan
+        // berulang kali.
+        $js = file_get_contents(resource_path('js/game.js'));
+        $blade = file_get_contents(resource_path('views/student/game.blade.php'));
+
+        // Tombol yang ditekan langsung diberi warna benar/salah.
+        $this->assertStringContainsString('tandaiPilihan(pilihan, tepat, kunciJawaban);', $js);
+        $this->assertStringContainsString('GAYA_PILIHAN_BENAR', $js);
+        $this->assertStringContainsString('GAYA_PILIHAN_SALAH', $js);
+
+        // Pesan umpan balik tampil di dalam panel soal, tepat di bawah tombol.
+        $this->assertStringContainsString('id="soal-pesan"', $blade);
+
+        // Jeda setelah menjawab juga dipersingkat (dulu 900 ms).
+        $this->assertStringNotContainsString('}, 900);', $js);
+    }
+
     public function test_permainan_tidak_beku_terus_menerus(): void
     {
         // REGRESI: versi sebelumnya men-set `soalTerbuka = true` saat soal

@@ -238,6 +238,16 @@
                                 Soal akan muncul saat permainan dimulai.
                             </p>
 
+                            {{-- Umpan balik benar/salah tepat di samping tombol
+                                 pilihan. Dulu pesannya hanya muncul di kolom papan
+                                 yang jauh dari jangkauan mata anak, sehingga terasa
+                                 seperti kliknya tidak masuk. --}}
+                            <p id="soal-pesan"
+                               class="mt-2 rounded-2xl px-3 py-2 text-sm font-black"
+                               role="status"
+                               aria-live="polite"
+                               hidden></p>
+
                             <div id="soal-pilihan" class="mt-3 space-y-2"></div>
                         </div>
                     </div>

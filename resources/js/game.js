@@ -448,6 +448,7 @@
         const elBenar = document.getElementById('stat-benar');
         const elSoal = document.getElementById('soal-teks');
         const elPilihan = document.getElementById('soal-pilihan');
+        const elPesanSoal = document.getElementById('soal-pesan');
         const elPesan = document.getElementById('game-pesan');
         const panelSoal = document.getElementById('panel-soal');
         const btnMulai = document.getElementById('btn-mulai');
@@ -654,6 +655,56 @@
             }, 1200);
         }
 
+        // Gaya tombol pilihan. Dipisah dari gambarSoal() supaya warnanya bisa
+        // langsung diubah saat anak menjawab (umpan balik seketika).
+        const GAYA_PILIHAN =
+            'w-full cursor-pointer rounded-2xl border-2 border-sky-200 bg-white px-4 py-3.5 text-left text-[15px] font-bold text-ink-800 transition hover:border-sky-400 hover:bg-sky-50 active:scale-[0.99] disabled:cursor-default';
+        const GAYA_PILIHAN_BENAR =
+            'w-full rounded-2xl border-2 border-mint-500 bg-mint-400/20 px-4 py-3.5 text-left text-[15px] font-black text-mint-600';
+        const GAYA_PILIHAN_SALAH =
+            'w-full rounded-2xl border-2 border-coral-500 bg-coral-400/20 px-4 py-3.5 text-left text-[15px] font-black text-coral-500';
+        const GAYA_PILIHAN_REDUP =
+            'w-full rounded-2xl border-2 border-sky-100 bg-white/50 px-4 py-3.5 text-left text-[15px] font-bold text-ink-500 opacity-50';
+
+        // Pesan benar/salah tepat di samping tombol pilihan. Dulu umpan balik
+        // hanya muncul di kolom papan (jauh dari mata anak yang menekan tombol),
+        // sehingga terasa seperti kliknya tidak masuk.
+        function tulisPesanSoal(teks, kelas) {
+            if (!elPesanSoal) return;
+
+            if (!teks) {
+                elPesanSoal.hidden = true;
+                elPesanSoal.textContent = '';
+                return;
+            }
+
+            elPesanSoal.hidden = false;
+            elPesanSoal.textContent = teks;
+            elPesanSoal.className = 'mt-2 rounded-2xl px-3 py-2 text-sm font-black ' + kelas;
+        }
+
+        // Warnai tombol pilihan SEKETIKA saat ditekan: yang dipilih jadi hijau
+        // (benar) atau merah (salah), kunci jawaban ikut ditampilkan, sisanya
+        // diredupkan. Sebelumnya tombol hanya di-disable tanpa perubahan
+        // tampilan apa pun — itu sebabnya terasa "tidak bisa ditekan".
+        function tandaiPilihan(dipilih, tepat, kunciJawaban) {
+            elPilihan.querySelectorAll('button').forEach(function (b, i) {
+                b.disabled = true;
+
+                if (i === dipilih) {
+                    b.className = tepat ? GAYA_PILIHAN_BENAR : GAYA_PILIHAN_SALAH;
+                    return;
+                }
+
+                if (!tepat && i === kunciJawaban) {
+                    b.className = GAYA_PILIHAN_BENAR;
+                    return;
+                }
+
+                b.className = GAYA_PILIHAN_REDUP;
+            });
+        }
+
         // Gambar soal yang sedang aktif beserta tombol pilihannya.
         // Dipakai ulang saat soal yang sama harus ditawarkan lagi (jawaban salah).
         function gambarSoal() {
@@ -663,12 +714,12 @@
             elSoal.textContent =
                 'Soal ' + Math.min(nomorSoal, soal.length) + ' dari ' + soal.length + ': ' + soalSekarang.pertanyaan;
             elPilihan.innerHTML = '';
+            tulisPesanSoal('');
 
             soalSekarang.pilihan.forEach(function (teks, i) {
                 const btn = document.createElement('button');
                 btn.type = 'button';
-                btn.className =
-                    'rounded-2xl border-2 border-sky-200 bg-white px-4 py-3 text-left text-sm font-bold text-ink-800 transition hover:border-sky-400 hover:bg-sky-50';
+                btn.className = GAYA_PILIHAN;
                 btn.textContent = teks;
                 btn.addEventListener('click', function () {
                     jawab(i);
@@ -711,9 +762,14 @@
             if (!jalan || tungguJawab || !soalSekarang) return;
 
             tungguJawab = true;
-            kunciPilihan(true);
 
-            const tepat = pilihan === soalSekarang.jawaban;
+            const kunciJawaban = soalSekarang.jawaban;
+            const teksKunci = soalSekarang.pilihan[kunciJawaban] || '';
+            const tepat = pilihan === kunciJawaban;
+
+            // Umpan balik SEKETIKA: tombol yang ditekan langsung diberi warna,
+            // sisanya diredupkan.
+            tandaiPilihan(pilihan, tepat, kunciJawaban);
 
             catatJawaban(pilihan, tepat);
 
@@ -722,6 +778,7 @@
                 game.skor += 15;
                 elPesan.textContent = '✅ Benar! Teruskan!';
                 elPesan.className = 'text-sm font-black text-mint-600';
+                tulisPesanSoal('✅ Benar! Lanjut ke soal berikutnya…', 'bg-mint-400/15 text-mint-600');
                 window.TikSound && window.TikSound.play('success');
 
                 // Efek sesuai game
@@ -740,7 +797,7 @@
                     // Bekukan sebentar saat berganti soal baru (diatur di
                     // tampilkanSoal()), lalu game berjalan lagi.
                     tampilkanSoal();
-                }, 900);
+                }, 450);
 
                 return;
             }
@@ -754,8 +811,9 @@
             // lagi. Anak boleh mengulang menjawab sambil game tetap bergerak.
             salah += 1;
             nyawa -= 1;
-            elPesan.textContent = '❌ Belum tepat. ' + soalSekarang.pilihan[soalSekarang.jawaban];
+            elPesan.textContent = '❌ Belum tepat. ' + teksKunci;
             elPesan.className = 'text-sm font-black text-coral-500';
+            tulisPesanSoal('❌ Belum tepat. Jawaban yang benar: ' + teksKunci, 'bg-coral-400/15 text-coral-500');
             window.TikSound && window.TikSound.play('error');
 
             const nyawaHabis = nyawa <= 0;
@@ -774,7 +832,7 @@
                 }
 
                 gambarSoal();
-            }, 900);
+            }, 700);
         }
 
         // Satu langkah simulasi beserta penanganan tabrakan/nyawa.
