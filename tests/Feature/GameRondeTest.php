@@ -664,9 +664,12 @@ class GameRondeTest extends TestCase
         $this->assertLessThanOrEqual($maksimum, $team->fresh()->xp);
     }
 
-    public function test_kunci_jawaban_game_tidak_dikirim_ke_browser(): void
+    public function test_kunci_jawaban_game_dikirim_untuk_umpan_balik_langsung(): void
     {
-        // KEAMANAN: kunci jawaban tidak boleh ada di HTML halaman game.
+        // Kunci jawaban IKUT dikirim supaya game.js bisa langsung menandai
+        // benar/salah (nyawa & lanjut soal) tanpa menunggu jaringan. Skor tetap
+        // 100% dinilai server — angka dari klien diabaikan (diuji di test lain),
+        // jadi kunci yang terlihat di DevTools tidak bisa dipakai memalsukan XP.
         $this->joinTeam();
         $mission = $this->bukaRonde(1);
 
@@ -681,14 +684,16 @@ class GameRondeTest extends TestCase
         $this->assertIsArray($json, 'Data soal game harus dikirim sebagai JSON.');
         $this->assertNotEmpty($json);
 
-        // Tiap soal hanya boleh berisi pertanyaan + pilihan.
+        // Tiap soal berisi pertanyaan + pilihan + indeks jawaban yang valid.
         foreach ($json as $soal) {
             $this->assertArrayHasKey('pertanyaan', $soal);
             $this->assertArrayHasKey('pilihan', $soal);
-            $this->assertArrayNotHasKey(
-                'jawaban',
-                $soal,
-                'Kunci jawaban TIDAK boleh ikut dikirim ke browser.'
+            $this->assertArrayHasKey('jawaban', $soal);
+            $this->assertGreaterThanOrEqual(0, $soal['jawaban']);
+            $this->assertLessThan(
+                count($soal['pilihan']),
+                $soal['jawaban'],
+                'Indeks kunci jawaban harus menunjuk salah satu pilihan.'
             );
         }
     }

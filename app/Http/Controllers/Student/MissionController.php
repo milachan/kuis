@@ -360,13 +360,18 @@ class MissionController extends Controller
                 ->with('error', 'Waktu sesi sudah habis. Permainan tidak dapat dimulai.');
         }
 
-        // Soal game TIDAK boleh dibocorkan bersama kuncinya. Yang dikirim ke
-        // browser hanya pertanyaan + pilihan; kunci jawaban tetap di server
-        // (lihat GameScoreService) supaya skor tidak bisa dipalsukan.
+        // Kunci jawaban IKUT dikirim ke browser HANYA untuk umpan balik cepat:
+        // game.js memakainya agar bisa langsung menandai benar/salah, mengurangi
+        // nyawa, dan lanjut ke soal berikutnya tanpa menunggu jaringan tiap
+        // menjawab. Ini TIDAK membuka celah skor, karena skor & XP tidak pernah
+        // diambil dari browser: GameScoreService menilai ulang daftar pilihan
+        // memakai kunci di server (lihat gameAnswer), sehingga angka "benar" /
+        // "skor" yang diubah anak lewat DevTools tetap diabaikan.
         $questions = collect($mission->gameQuestionList())
             ->map(fn (array $q) => [
                 'pertanyaan' => $q['pertanyaan'],
                 'pilihan' => $q['pilihan'],
+                'jawaban' => $q['jawaban'],
             ])
             ->values()
             ->all();
