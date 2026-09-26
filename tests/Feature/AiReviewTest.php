@@ -9,6 +9,7 @@ use App\Models\Team;
 use App\Models\TeamProgress;
 use App\Models\User;
 use App\Services\AiReviewService;
+use App\Services\ScoringService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\UploadedFile;
@@ -36,7 +37,7 @@ class AiReviewTest extends TestCase
         config()->set('ai.api_key', 'test-key-rahasia');
         config()->set('ai.base_url', 'https://api.deepseek.com');
         config()->set('ai.model', 'deepseek-chat');
-        config()->set('ai.xp_weight_percent', 70);
+        config()->set('tikmission.ai_xp_weight_percent', 70);
 
         $this->session = GameSession::query()->create([
             'code' => 'TIK8-AI',
@@ -143,6 +144,45 @@ class AiReviewTest extends TestCase
 
         // Misi tetap menunggu validasi bukti oleh guru.
         $this->assertSame(TeamProgress::STATUS_WAITING_VALIDATION, $progress->status);
+    }
+
+    public function test_xp_dari_ai_sama_dengan_xp_saat_guru_meluluskan(): void
+    {
+        // REGRESI: dulu awardFromAi() melewatkan bonus tepat waktu, sehingga
+        // XP dari AI (120) berbeda dari XP saat guru meluluskan (130) walau
+        // skor sempurna. Angka di layar proyektor jadi melompat. Keduanya
+        // sekarang wajib memakai rumus XP maksimum yang sama.
+        config()->set('tikmission.ai_xp_weight_percent', 100);
+
+        Http::fake(['api.deepseek.com/*' => Http::response($this->fakeAiResponse(100), 200)]);
+
+        $team = $this->joinTeam();
+        $mission = Mission::query()->firstOrFail();
+
+        // Sesi memakai timer yang masih berjalan -> bonus tepat waktu berlaku.
+        $this->session->update(['duration_minutes' => 60, 'start_time' => now()]);
+
+        $this->post('/student/mission/'.$mission->id.'/submit', [
+            'answer' => 'Bold menebalkan teks.',
+            'evidence' => UploadedFile::fake()->image('bukti.png'),
+        ]);
+
+        $progress = TeamProgress::query()->where('team_id', $team->id)->firstOrFail();
+
+        // XP setelah skor AI sempurna.
+        $xpAi = (int) $progress->fresh()->xp;
+
+        // XP yang dilihat guru di halaman validasi (preview) untuk misi ini.
+        $xpGuru = app(ScoringService::class)
+            ->previewFor($progress->fresh(), $this->session->fresh());
+
+        $this->assertGreaterThan(0, $xpAi);
+        $this->assertSame(
+            $xpGuru,
+            $xpAi,
+            'XP dari penilaian AI harus sama dengan XP saat guru meluluskan, '
+            .'supaya angka di layar proyektor tidak melompat.'
+        );
     }
 
     public function test_permintaan_ke_ai_memakai_model_dan_kunci_yang_benar(): void

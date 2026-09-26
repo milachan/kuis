@@ -34,9 +34,32 @@ return [
     // Tujuannya menghargai usaha berpikir dan menulis sendiri.
     'own_words_bonus_xp' => 15,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Bobot XP dari aktivitas otomatis
+    |--------------------------------------------------------------------------
+    |
+    | Kedua nilai di bawah ini adalah "berapa persen dari XP maksimum misi"
+    | yang bisa didapat SEBELUM guru memvalidasi jawaban uraian. Ini satu-satunya
+    | tempat mengaturnya — jangan menaruh bobot serupa di config lain, supaya
+    | tidak ada dua tombol berbeda untuk hal yang sama.
+    |
+    | Sisa XP (100% - bobot) tetap menunggu validasi guru, sehingga misi baru
+    | dianggap tuntas setelah guru menyetujui.
+    |
+    */
+
     // Bobot XP dari GAME ARCADE (persen dari XP maksimum misi).
     // Sisanya (20%) menjadi bonus dari skor permainan.
-    'game_xp_weight_percent' => 80,
+    'game_xp_weight_percent' => (int) env('GAME_XP_WEIGHT_PERCENT', 80),
+
+    // Bobot XP dari penilaian AI atas jawaban uraian (persen dari XP maks).
+    // Contoh: XP maks 120, bobot 70 -> skor AI 80 memberi 120 x 0.7 x 0.8 = 67.
+    'ai_xp_weight_percent' => (int) env('AI_XP_WEIGHT_PERCENT', 70),
+
+    // Poin "skor main" untuk setiap jawaban game yang BENAR. Nilai ini
+    // dihitung di SERVER (bukan dari browser), lalu dipakai sebagai bonus XP.
+    'game_score_per_correct' => 15,
 
     // Default XP per misi bila misi tidak mendefinisikan XP sendiri.
     'default_mission_xp' => 100,

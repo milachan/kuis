@@ -7,7 +7,7 @@ use App\Models\Mission;
 use Illuminate\Database\Seeder;
 
 /**
- * Materi Bab 4 — Sistem Komputer (Kelas VIII MTs).
+ * Materi Bab Sistem Komputer (Kelas VIII MTs).
  *
  * Sumber: Buku Siswa Informatika KLS VIII, halaman 78-95.
  *
@@ -40,7 +40,7 @@ class Bab3MateriSeeder extends Seeder
 
         $this->selaraskanSesiDemo($missions);
 
-        $this->command?->info('Materi Bab 4 selesai: '.count($missions).' ronde dengan game arcade.');
+        $this->command?->info('Materi Sistem Komputer selesai: '.count($missions).' ronde dengan game arcade.');
     }
 
     /**
@@ -92,7 +92,7 @@ class Bab3MateriSeeder extends Seeder
         $session = GameSession::query()->updateOrCreate(
             ['code' => 'TIK8-DEMO'],
             [
-                'name' => 'Sesi Demo — Bab 4 Sistem Komputer',
+                'name' => 'Sesi Demo — Sistem Komputer',
                 'duration_minutes' => 0,
                 'start_time' => now(),
                 'end_time' => null,

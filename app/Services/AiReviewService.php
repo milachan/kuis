@@ -157,9 +157,10 @@ class AiReviewService
     {
         return <<<'PROMPT'
         Kamu adalah guru Informatika SMP di Indonesia yang menilai jawaban siswa kelas 8
-        pada Bab 3: Teknologi Informasi dan Komunikasi (perangkat lunak aplikasi, objek
-        dan fitur aplikasi, format file, pembuatan laporan, merangkum konten digital, dan
-        laboratorium maya).
+        pada Bab Sistem Komputer (kelas VIII MTs): komponen sistem komputer (perangkat
+        keras, perangkat lunak, pengguna), perangkat input & output, prosesor, media
+        penyimpanan & komputasi awan, sistem operasi, dasar pemrograman, dan bilangan
+        heksadesimal.
 
         Tugasmu: menilai JAWABAN URAIAN PENDEK siswa terhadap beberapa pertanyaan sebuah misi,
         sekaligus memberi indikator keaslian jawaban.

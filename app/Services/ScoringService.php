@@ -9,9 +9,37 @@ use App\Models\TeamProgress;
 /**
  * Perhitungan XP: XP misi, bonus, dan pengurangan karena petunjuk.
  * Skor hanya elemen game — wajib sederhana dan mudah dijelaskan.
+ *
+ * PENTING: ada SATU sumber kebenaran untuk XP maksimum sebuah misi, yaitu
+ * `maxXpFor()`. Dipakai oleh validasi guru, penilaian game, dan penilaian AI,
+ * supaya angka di layar proyektor tidak pernah "melompat" karena perbedaan
+ * rumus antar-kode.
  */
 class ScoringService
 {
+    /**
+     * XP MAKSIMUM sebuah misi (dasar + bonus tanpa petunjuk - penalti petunjuk).
+     *
+     * Ini satu-satunya tempat rumus ini ditulis. Semua pihak yang menghitung
+     * XP (guru, game, AI) memakai method ini agar hasilnya selalu konsisten.
+     */
+    public function maxXpFor(TeamProgress $progress): int
+    {
+        $base = $progress->mission->xp ?: (int) config('tikmission.default_mission_xp');
+
+        $xp = $base;
+
+        // Bonus tanpa bantuan/petunjuk.
+        if ($progress->hints_used === 0) {
+            $xp += (int) config('tikmission.no_hint_bonus_xp');
+        }
+
+        // Penalti petunjuk.
+        $xp -= $progress->hints_used * (int) config('tikmission.hint_penalty_xp');
+
+        return max(0, $xp);
+    }
+
     /**
      * Hitung dan simpan XP untuk sebuah progres misi.
      *
@@ -25,21 +53,12 @@ class ScoringService
      */
     public function awardForCompletion(TeamProgress $progress, GameSession $session): int
     {
-        $base = $progress->mission->xp ?: (int) config('tikmission.default_mission_xp');
-        $xp = $base;
-
-        // Bonus tanpa bantuan/petunjuk.
-        if ($progress->hints_used === 0) {
-            $xp += (int) config('tikmission.no_hint_bonus_xp');
-        }
+        $xp = $this->maxXpFor($progress);
 
         // Bonus tepat waktu — hanya bila sesi memakai timer dan masih ada sisa waktu.
         if ($session->hasTimer() && ! $session->isTimeUp()) {
             $xp += (int) config('tikmission.on_time_bonus_xp');
         }
-
-        // Penalti petunjuk.
-        $xp -= $progress->hints_used * (int) config('tikmission.hint_penalty_xp');
 
         $xp = max(0, $xp);
 
@@ -58,10 +77,9 @@ class ScoringService
     /**
      * XP sementara dari hasil penilaian AI atas jawaban refleksi.
      *
-     * Memakai rumus yang sama dengan awardForCompletion() (XP dasar + bonus
-     * tanpa petunjuk + bonus tepat waktu - penalti petunjuk), lalu dikalikan
-     * skor AI dan bobot config. Dengan begitu angka di layar proyektor tidak
-     * "melompat turun" saat guru menyatakan lulus.
+     * Memakai XP MAKSIMUM yang sama dengan awardForCompletion() (lewat
+     * maxXpFor()), lalu dikalikan skor AI dan bobot config. Dengan begitu
+     * angka di layar proyektor tidak "melompat turun" saat guru menyatakan lulus.
      *
      * XP tidak pernah melebihi XP final misi dan tidak pernah menurunkan XP
      * yang sudah tercatat.
@@ -72,19 +90,17 @@ class ScoringService
             return 0;
         }
 
-        $mission = $progress->mission;
-        $base = $mission->xp ?: (int) config('tikmission.default_mission_xp');
         $score = max(0, min(100, (int) $submission->ai_score));
 
-        // Nilai maksimum misi ini memakai rumus yang sama dengan validasi guru.
-        $maxAward = $base;
-        if ($progress->hints_used === 0) {
-            $maxAward += (int) config('tikmission.no_hint_bonus_xp');
-        }
-        $maxAward -= $progress->hints_used * (int) config('tikmission.hint_penalty_xp');
-        $maxAward = max(0, $maxAward);
+        // Nilai maksimum misi ini memakai rumus yang sama dengan validasi guru,
+        // termasuk bonus tepat waktu supaya XP AI dan XP guru tidak berbeda.
+        $maxAward = $this->maxXpFor($progress);
 
-        $weight = max(0, min(100, (int) config('ai.xp_weight_percent')));
+        if ($progress->team?->gameSession?->hasTimer() && ! $progress->team->gameSession->isTimeUp()) {
+            $maxAward += (int) config('tikmission.on_time_bonus_xp');
+        }
+
+        $weight = max(0, min(100, (int) config('tikmission.ai_xp_weight_percent')));
         $earned = (int) round($maxAward * ($weight / 100) * ($score / 100));
 
         // BONUS USAHA: bila siswa jelas menjawab dengan bahasanya sendiri,
@@ -119,18 +135,11 @@ class ScoringService
      */
     public function previewFor(TeamProgress $progress, GameSession $session): int
     {
-        $base = $progress->mission->xp ?: (int) config('tikmission.default_mission_xp');
-        $xp = $base;
-
-        if ($progress->hints_used === 0) {
-            $xp += (int) config('tikmission.no_hint_bonus_xp');
-        }
+        $xp = $this->maxXpFor($progress);
 
         if ($session->hasTimer() && ! $session->isTimeUp()) {
             $xp += (int) config('tikmission.on_time_bonus_xp');
         }
-
-        $xp -= $progress->hints_used * (int) config('tikmission.hint_penalty_xp');
 
         return max(0, $xp);
     }

@@ -360,13 +360,13 @@ class MissionController extends Controller
                 ->with('error', 'Waktu sesi sudah habis. Permainan tidak dapat dimulai.');
         }
 
-        // Soal game tidak boleh dibocorkan bersama kuncinya, jadi kunci
-        // jawaban dikirim terpisah dan hanya dipakai mesin permainan lokal.
+        // Soal game TIDAK boleh dibocorkan bersama kuncinya. Yang dikirim ke
+        // browser hanya pertanyaan + pilihan; kunci jawaban tetap di server
+        // (lihat GameScoreService) supaya skor tidak bisa dipalsukan.
         $questions = collect($mission->gameQuestionList())
             ->map(fn (array $q) => [
                 'pertanyaan' => $q['pertanyaan'],
                 'pilihan' => $q['pilihan'],
-                'jawaban' => $q['jawaban'],
             ])
             ->values()
             ->all();
@@ -383,8 +383,13 @@ class MissionController extends Controller
     }
 
     /**
-     * Catat jawaban game (dikirim dari browser tiap kali anak menjawab).
-     * Dipakai untuk XP, statistik, dan catatan guru.
+     * Catat jawaban game.
+     *
+     * KEAMANAN: browser HANYA mengirim soal mana yang tampil dan pilihan mana
+     * yang ditekan (`jawaban`: daftar {pertanyaan, pilihan}). Server menilai
+     * ulang semuanya dengan kunci jawaban misi dan menghitung sendiri
+     * benar / salah / skor. Angka apa pun dari klien diabaikan, sehingga siswa
+     * tidak bisa memalsukan skor lewat DevTools atau permintaan langsung.
      */
     public function gameAnswer(Request $request, Mission $mission)
     {
@@ -407,100 +412,35 @@ class MissionController extends Controller
             return response()->json(['ok' => false, 'message' => 'Ronde ini belum bisa dimainkan.'], 422);
         }
 
-        // Ada DUA jenis kiriman ke endpoint ini:
-        //   1. satu jawaban  -> wajib membawa pertanyaan & tepat;
-        //   2. ringkasan akhir permainan -> cukup benar/salah/skor.
-        // Browser hanya mengirim ketiga angka itu untuk ringkasan, jadi
-        // mewajibkan pertanyaan & tepat di sini membuat SEMUA ringkasan ditolak
-        // dan XP permainan tidak pernah sampai ke server.
         $validated = $request->validate([
-            'pertanyaan' => ['required_without:ringkasan', 'nullable', 'string', 'max:500'],
-            'pilihan' => ['nullable', 'string', 'max:500'],
-            'tepat' => ['required_without:ringkasan', 'nullable', 'boolean'],
-            'ringkasan' => ['nullable', 'boolean'],
-            'benar' => ['nullable', 'integer', 'min:0', 'max:200'],
-            'salah' => ['nullable', 'integer', 'min:0', 'max:200'],
-            'skor' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'jawaban' => ['required', 'array', 'min:1', 'max:200'],
+            'jawaban.*.pertanyaan' => ['required', 'string', 'max:500'],
+            'jawaban.*.pilihan' => ['nullable', 'string', 'max:500'],
+        ], [
+            'jawaban.required' => 'Tidak ada jawaban permainan yang dikirim.',
+            'jawaban.min' => 'Tidak ada jawaban permainan yang dikirim.',
         ]);
 
         $progress = $team->progress()->where('mission_id', $mission->id)->firstOrFail();
         $submission = $this->gameScores->submissionFor($team, $mission);
 
-        // Susun daftar jawaban salah untuk catatan guru.
-        $missed = $submission->game_missed ?? [];
+        // Server yang menilai: benar/salah/skor dihitung dari kunci jawaban misi.
+        $hasil = $this->gameScores->evaluate($progress, $submission, $mission, $validated['jawaban']);
 
-        if (! empty($validated['ringkasan'])) {
-            // Kirim ringkasan akhir permainan: hitung XP & simpan hasil.
-            $benar = (int) ($validated['benar'] ?? 0);
-            $salah = (int) ($validated['salah'] ?? 0);
-
-            $submission->forceFill([
-                'game_correct' => $benar,
-                'game_wrong' => $salah,
-                'game_score' => (int) ($validated['skor'] ?? 0),
-                // Ringkasan bisa terkirim lebih dari sekali (kiriman ulang setelah
-                // jaringan pulih), jadi waktu main pertama yang dipertahankan.
-                'game_played_at' => $submission->game_played_at ?: now(),
-                'game_missed' => array_slice($missed, -20),
-                'answer' => $submission->answer ?: $this->ringkasanTeks($benar, $salah, $mission),
-                'submitted_at' => $submission->submitted_at ?: now(),
-                'status' => Submission::STATUS_WAITING,
-            ])->save();
-
-            $xpSebelum = (int) $progress->xp;
-
-            $xp = $this->gameScores->award($progress, $submission, $benar, $salah);
-
-            return response()->json([
-                'ok' => true,
-                'message' => 'Hasil permainan tersimpan.',
-                // Total XP misi ini setelah permainan.
-                'xp' => $xp,
-                // Tambahan XP dari permainan yang BARU SAJA selesai, supaya
-                // anak melihat langsung efek jawabannya di papan hasil.
-                'xp_gain' => max(0, $xp - $xpSebelum),
-                'total_xp' => (int) $progress->team->xp,
-                'benar' => $benar,
-                'salah' => $salah,
-            ]);
-        }
-
-        // Jawaban satu per satu: catat bila salah.
-        if (! ($validated['tepat'] ?? false)) {
-            $missed[] = [
-                'pertanyaan' => $validated['pertanyaan'] ?? '—',
-                'dijawab' => $validated['pilihan'] ?? '—',
-            ];
-
-            $submission->forceFill([
-                'game_missed' => array_slice($missed, -20),
-                'submitted_at' => $submission->submitted_at ?: now(),
-            ])->save();
-        }
-
-        return response()->json(['ok' => true]);
-    }
-
-    /**
-     * Ringkasan teks hasil game, agar guru melihat sesuatu di kolom jawaban.
-     */
-    protected function ringkasanTeks(int $benar, int $salah, Mission $mission): string
-    {
-        $total = $benar + $salah;
-        $akurasi = $total > 0 ? round(($benar / $total) * 100) : 0;
-
-        $info = $mission->gameInfo();
-
-        // Awalannya memakai konstanta model supaya teks ini dan pemeriksaan
-        // "jawaban masih cuma ringkasan game" tidak pernah berbeda.
-        return sprintf(
-            Submission::GAME_SUMMARY_PREFIX.' %s] Jawaban benar %d, salah %d dari %d soal (akurasi %d%%).',
-            $info['label'] ?? 'arcade',
-            $benar,
-            $salah,
-            $total,
-            $akurasi
-        );
+        return response()->json([
+            'ok' => true,
+            'message' => 'Hasil permainan tersimpan.',
+            'benar' => $hasil['benar'],
+            'salah' => $hasil['salah'],
+            'skor' => $hasil['skor'],
+            'total' => $hasil['total'],
+            // Total XP misi ini setelah permainan dinilai server.
+            'xp' => $hasil['xp'],
+            // Tambahan XP dari permainan yang BARU SAJA selesai, supaya anak
+            // melihat langsung efek jawabannya di papan hasil.
+            'xp_gain' => $hasil['xp_gain'],
+            'total_xp' => $hasil['total_xp'],
+        ]);
     }
 
     /**

@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
- * Materi penuh Bab 3: 10 ronde, tanpa kewajiban unggah bukti,
+ * Materi penuh Bab Sistem Komputer: 7 ronde, tanpa kewajiban unggah bukti,
  * dan penilaian AI atas jawaban uraian.
  */
 class Bab3MateriTest extends TestCase
@@ -32,7 +32,7 @@ class Bab3MateriTest extends TestCase
 
         config()->set('ai.enabled', true);
         config()->set('ai.api_key', 'kunci-uji');
-        config()->set('ai.xp_weight_percent', 70);
+        config()->set('tikmission.ai_xp_weight_percent', 70);
 
         // Pakai seeder materi sungguhan agar yang diuji adalah data nyata.
         $this->seed(Bab3MateriSeeder::class);

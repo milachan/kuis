@@ -488,6 +488,13 @@
         let salah = 0;
         let soalSekarang = null;
 
+        // Catatan SETIAP pilihan yang ditekan anak selama ronde ini.
+        // Inilah satu-satunya data yang dikirim ke server. Server menilai
+        // ulang memakai kunci jawaban misi, jadi anak tidak bisa memalsukan
+        // skor lewat DevTools. `benar`/`salah`/`game.skor` di sini hanya untuk
+        // tampilan di layar, bukan sumber kebenaran.
+        let catatanJawaban = [];
+
         // Sisa soal ronde ini yang belum dijawab BENAR. Diisi ulang hanya saat
         // ronde dimulai (mulaiMain), jadi soal yang sudah dijawab benar tidak
         // pernah muncul dua kali dalam satu ronde.
@@ -624,24 +631,17 @@
             });
         }
 
-        // Kirim jawaban ke server (untuk XP & catatan guru).
-        function laporJawaban(pilihan, tepat) {
-            if (!jawabUrl) return;
+        // Catat pilihan anak. Ini SATU-SATUNYA data kiriman; server yang
+        // menentukan benar/salah. `tepat` di sini hanya untuk tampilan lokal.
+        function catatJawaban(pilihan, tepat) {
+            if (!soalSekarang) return;
 
-            fetch(jawabUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrf,
-                },
-                body: JSON.stringify({
-                    pertanyaan: soalSekarang ? soalSekarang.pertanyaan : '',
-                    pilihan: pilihan,
-                    tepat: tepat,
-                }),
-            }).catch(function () {
-                // Kegagalan jaringan tidak boleh menghentikan permainan.
+            catatanJawaban.push({
+                pertanyaan: soalSekarang.pertanyaan,
+                pilihan: soalSekarang.pilihan[pilihan] || '',
+                // Dipakai hanya untuk pemantauan ronde (belum ada jawaban ->
+                // tidak perlu kirim apa pun). Bukan sumber kebenaran skor.
+                tepat: tepat,
             });
         }
 
@@ -653,7 +653,7 @@
 
             const tepat = pilihan === soalSekarang.jawaban;
 
-            laporJawaban(pilihan, tepat);
+            catatJawaban(pilihan, tepat);
 
             if (tepat) {
                 benar += 1;
@@ -752,6 +752,8 @@
             nyawa = 3;
             benar = 0;
             salah = 0;
+            // Mulai catatan jawaban baru; server akan menilai daftar ini.
+            catatanJawaban = [];
             // Daftar soal disiapkan ulang SETIAP ronde. Sebelumnya daftar ini
             // ikut "diisi ulang" saat habis dan counter soalnya tidak di-reset,
             // sehingga ronde hanya bertahan satu jawaban benar (dan makin pendek
@@ -846,19 +848,21 @@
 
         // Muatan ringkasan. Dipakai oleh kirimRingkasan(), sendBeacon saat tab
         // ditutup, dan simpanan cadangan di browser.
+        //
+        // Yang dikirim hanya DAFTAR PILIHAN yang ditekan anak (`jawaban`).
+        // Server menilai ulang dengan kunci jawaban misi, jadi angka benar /
+        // salah / skor tidak pernah datang dari browser.
         function muatanRingkasan() {
             return {
                 url: jawabUrl,
-                benar: benar,
-                salah: salah,
-                skor: game.skor,
+                jawaban: catatanJawaban,
             };
         }
 
         // Kirim ringkasan permainan ke server (XP & catatan guru).
         // Mengembalikan respons server, atau null bila gagal terkirim.
         async function kirimRingkasan() {
-            if (!jawabUrl) return null;
+            if (!jawabUrl || catatanJawaban.length === 0) return null;
 
             const muatan = muatanRingkasan();
 
@@ -870,14 +874,7 @@
                         'Accept': 'application/json',
                         'X-CSRF-TOKEN': csrf,
                     },
-                    body: JSON.stringify({
-                        ringkasan: true,
-                        pertanyaan: 'ringkasan',
-                        tepat: true,
-                        benar: muatan.benar,
-                        salah: muatan.salah,
-                        skor: muatan.skor,
-                    }),
+                    body: JSON.stringify({ jawaban: muatan.jawaban }),
                 });
 
                 if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -908,7 +905,7 @@
 
             setInterval(async function () {
                 if (!jalan) return;              // hanya perlu saat masih bermain
-                if (benar + salah === 0) return; // belum menjawab apa pun
+                if (catatanJawaban.length === 0) return; // belum menjawab apa pun
                 if (document.visibilityState === 'hidden') return;
 
                 try {
@@ -953,7 +950,7 @@
         // permainan: titipkan ringkasan lewat sendBeacon, DAN simpan cadangannya
         // di browser. Kalau titipannya gagal, halaman berikutnya yang mengirim.
         window.addEventListener('pagehide', function () {
-            if (!jawabUrl || benar + salah === 0) return;
+            if (!jawabUrl || catatanJawaban.length === 0) return;
 
             const muatan = muatanRingkasan();
 
@@ -964,12 +961,7 @@
                     jawabUrl,
                     new Blob([
                         JSON.stringify({
-                            ringkasan: true,
-                            pertanyaan: 'ringkasan',
-                            tepat: true,
-                            benar: muatan.benar,
-                            salah: muatan.salah,
-                            skor: muatan.skor,
+                            jawaban: muatan.jawaban,
                             _token: csrf,
                         }),
                     ], { type: 'application/json' })
@@ -1010,12 +1002,27 @@
 
             hujanKonfeti();
 
-            // XP baru diketahui setelah server mencatat hasilnya.
+            // XP baru diketahui setelah server mencatat hasilnya. Angka yang
+            // ditampilkan di sini adalah hasil PENILAIAN SERVER, bukan hitungan
+            // browser — jadi papan hasil tidak bisa "diakali" dari DevTools.
             kirimRingkasan().then(function (data) {
-                if (!elHasilXp) return;
-
                 if (data && typeof data.xp_gain === 'number') {
-                    elHasilXp.textContent = '+' + data.xp_gain + ' XP';
+                    // Selaraskan tampilan dengan hasil resmi server.
+                    const totalResmi = data.total;
+                    const benarResmi = data.benar;
+                    const akurasiResmi = totalResmi > 0
+                        ? Math.round((benarResmi / totalResmi) * 100)
+                        : 0;
+
+                    if (elHasilBenar) elHasilBenar.textContent = benarResmi + '/' + totalResmi;
+                    if (elHasilAkurasi) elHasilAkurasi.textContent = akurasiResmi + '%';
+                    if (elHasilSkor) elHasilSkor.textContent = String(data.skor);
+                    if (elHasilSebab) {
+                        elHasilSebab.textContent =
+                            sebab + ' · jawaban benar ' + benarResmi + ' dari ' + totalResmi + ' soal';
+                    }
+
+                    if (elHasilXp) elHasilXp.textContent = '+' + data.xp_gain + ' XP';
 
                     if (elHasilXpRincian) {
                         elHasilXpRincian.textContent =
@@ -1026,7 +1033,7 @@
                     return;
                 }
 
-                elHasilXp.textContent = '—';
+                if (elHasilXp) elHasilXp.textContent = '—';
 
                 if (elHasilXpRincian) {
                     elHasilXpRincian.textContent =

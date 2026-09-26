@@ -282,6 +282,10 @@
 
     /**
      * Kirim satu ringkasan permainan. Mengembalikan true bila server menerimanya.
+     *
+     * Yang dikirim hanya DAFTAR PILIHAN yang ditekan anak; server menilai
+     * ulang memakai kunci jawaban misi, jadi skor tidak bisa dipalsukan dari
+     * browser dan kiriman ganda tidak menggandakan XP.
      */
     async function kirimRingkasanGame(data) {
         try {
@@ -293,12 +297,7 @@
                     'X-CSRF-TOKEN': csrfToken(),
                 },
                 body: JSON.stringify({
-                    ringkasan: true,
-                    pertanyaan: 'ringkasan',
-                    tepat: true,
-                    benar: data.benar,
-                    salah: data.salah,
-                    skor: data.skor,
+                    jawaban: data.jawaban || [],
                     _token: csrfToken(),
                 }),
             });
@@ -330,8 +329,8 @@
         /**
          * Kirim ulang semua ringkasan yang tertunda.
          *
-         * Aman dipanggil berkali-kali: server menghitung XP dari angka yang
-         * dikirim (bukan menambahkannya), jadi kiriman ganda tidak
+         * Aman dipanggil berkali-kali: server menghitung XP dari daftar
+         * jawaban yang dikirim (bukan menambahkannya), jadi kiriman ganda tidak
          * menggandakan XP.
          */
         flush() {

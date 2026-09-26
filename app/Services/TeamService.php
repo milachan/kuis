@@ -48,6 +48,12 @@ class TeamService
     /**
      * Ganti daftar anggota kelompok.
      *
+     * Hanya anggota yang BENAR-BENAR berubah yang disentuh: nama yang sudah ada
+     * dipertahankan (ID-nya tidak berubah), yang hilang dihapus, dan yang baru
+     * ditambahkan. Versi lama menghapus semua lalu membuat ulang setiap kali
+     * siswa masuk, sehingga ID anggota selalu berubah dan baris lama menumpuk
+     * di database.
+     *
      * @param  array<int, string>  $members
      */
     public function syncMembers(Team $team, array $members): void
@@ -56,14 +62,25 @@ class TeamService
             ->map(fn ($m) => trim((string) $m))
             ->filter(fn ($m) => $m !== '')
             ->unique()
+            ->map(fn ($m) => Str::limit($m, 100, ''))
             ->values();
 
-        $team->members()->delete();
+        $sekarang = $team->members()->pluck('name')->all();
+
+        // Hapus hanya nama yang memang tidak ada lagi di daftar baru.
+        $team->members()->whereNotIn('name', $clean->all())->delete();
+
+        // Tambah hanya nama yang belum ada (case-insensitive).
+        $sudahAda = collect($sekarang)->map(fn ($n) => mb_strtolower($n))->all();
 
         foreach ($clean as $memberName) {
+            if (in_array(mb_strtolower($memberName), $sudahAda, true)) {
+                continue;
+            }
+
             TeamMember::query()->create([
                 'team_id' => $team->id,
-                'name' => Str::limit($memberName, 100, ''),
+                'name' => $memberName,
             ]);
         }
     }

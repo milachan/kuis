@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\RoundService;
 use Database\Seeders\Bab3MateriSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
@@ -51,6 +52,38 @@ class GameRondeTest extends TestCase
         $rounds->start($this->session, $order, 10);
 
         return Mission::query()->where('order', $order)->firstOrFail();
+    }
+
+    /**
+     * Susun daftar jawaban game seperti yang dikirim browser.
+     *
+     * Server menilai sendiri memakai kunci misi, jadi tes ini hanya menentukan
+     * BERAPA soal pertama dijawab benar; sisanya sengaja dijawab salah.
+     * Angka benar/salah/skor TIDAK pernah dikirim klien.
+     *
+     * @return array<int, array{pertanyaan: string, pilihan: string}>
+     */
+    protected function jawabanGame(Mission $mission, int $benar): array
+    {
+        return collect($mission->gameQuestionList())
+            ->values()
+            ->map(function (array $q, int $i) use ($benar) {
+                $kunci = (int) $q['jawaban'];
+                $pilihan = $i < $benar
+                    ? $q['pilihan'][$kunci]
+                    : $q['pilihan'][($kunci + 1) % count($q['pilihan'])];
+
+                return ['pertanyaan' => $q['pertanyaan'], 'pilihan' => (string) $pilihan];
+            })
+            ->all();
+    }
+
+    /** Kirim hasil permainan: `$benar` soal pertama benar, sisanya salah. */
+    protected function mainkan(Mission $mission, int $benar): TestResponse
+    {
+        return $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
+            'jawaban' => $this->jawabanGame($mission, $benar),
+        ]);
     }
 
     // -----------------------------------------------------------------
@@ -342,32 +375,41 @@ class GameRondeTest extends TestCase
         $team = $this->joinTeam();
         $mission = $this->bukaRonde(1);
 
+        $soal = $mission->gameQuestionList()[0];
+        $salah = $soal['pilihan'][($soal['jawaban'] + 1) % count($soal['pilihan'])];
+
         $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
-            'pertanyaan' => 'Komponen komputer yang bisa disentuh disebut...',
-            'pilihan' => 'Software',
-            'tepat' => false,
+            'jawaban' => [
+                ['pertanyaan' => $soal['pertanyaan'], 'pilihan' => $salah],
+            ],
         ])->assertOk();
 
         $submission = Submission::query()->firstOrFail();
 
         $this->assertNotNull($submission->game_missed);
         $this->assertCount(1, $submission->game_missed);
-        $this->assertSame('Komponen komputer yang bisa disentuh disebut...', $submission->game_missed[0]['pertanyaan']);
+        $this->assertSame($soal['pertanyaan'], $submission->game_missed[0]['pertanyaan']);
     }
 
     public function test_jawaban_benar_tidak_dicatat_sebagai_kesalahan(): void
     {
-        $this->joinTeam();
+        $team = $this->joinTeam();
         $mission = $this->bukaRonde(1);
 
+        $soal = $mission->gameQuestionList()[0];
+        $benar = $soal['pilihan'][$soal['jawaban']];
+
         $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
-            'pertanyaan' => 'Hardware adalah...',
-            'pilihan' => 'Perangkat keras',
-            'tepat' => true,
+            'jawaban' => [
+                ['pertanyaan' => $soal['pertanyaan'], 'pilihan' => $benar],
+            ],
         ])->assertOk();
 
         $submission = Submission::query()->first();
-        $this->assertTrue($submission === null || empty($submission->game_missed));
+
+        $this->assertNotNull($submission);
+        $this->assertSame(1, $submission->game_correct);
+        $this->assertTrue(empty($submission->game_missed));
     }
 
     // -----------------------------------------------------------------
@@ -536,15 +578,8 @@ class GameRondeTest extends TestCase
         $this->joinTeam();
         $mission = $this->bukaRonde(1);
 
-        // Mainkan sampai selesai (ringkasan permainan terkirim).
-        $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
-            'ringkasan' => true,
-            'benar' => 8,
-            'salah' => 0,
-            'skor' => 300,
-            'pertanyaan' => 'ringkasan',
-            'tepat' => true,
-        ])->assertOk();
+        // Mainkan sampai selesai (daftar jawaban terkirim).
+        $this->mainkan($mission, 8)->assertOk();
 
         $response = $this->get('/student/mission/'.$mission->id);
 
@@ -565,63 +600,97 @@ class GameRondeTest extends TestCase
         $team = $this->joinTeam();
         $mission = $this->bukaRonde(1);
 
-        $response = $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
-            'ringkasan' => true,
-            'benar' => 7,
-            'salah' => 1,
-            'skor' => 240,
-            'pertanyaan' => 'ringkasan',
-            'tepat' => true,
-        ]);
+        $totalSoal = $mission->gameQuestionCount();
+        $response = $this->mainkan($mission, 7);
 
         $response->assertOk();
+        // Server menilai sendiri: 7 benar dari 8 soal (sisanya dijawab salah).
         $response->assertJsonPath('benar', 7);
-        $response->assertJsonPath('salah', 1);
+        $response->assertJsonPath('salah', $totalSoal - 7);
 
         // Papan hasil memerlukan tambahan XP dari permainan ini (bukan hanya
         // total misi) supaya anak melihat efek jawabannya.
-        $response->assertJsonStructure(['xp', 'xp_gain', 'total_xp']);
+        $response->assertJsonStructure(['xp', 'xp_gain', 'total_xp', 'skor']);
         $this->assertGreaterThan(0, $response->json('xp_gain'));
         $this->assertSame($response->json('xp'), $response->json('total_xp'));
 
         $submission = Submission::query()->firstOrFail();
 
         $this->assertSame(7, $submission->game_correct);
-        $this->assertSame(1, $submission->game_wrong);
-        $this->assertSame(240, $submission->game_score);
+        $this->assertSame($totalSoal - 7, $submission->game_wrong);
+        // Skor dihitung server: 7 x poin-per-benar (bukan angka dari klien).
+        $this->assertSame(7 * (int) config('tikmission.game_score_per_correct'), $submission->game_score);
         $this->assertNotNull($submission->game_played_at);
 
         // XP kelompok harus bertambah dari hasil game.
         $this->assertGreaterThan(0, $team->fresh()->xp);
     }
 
-    public function test_ringkasan_persis_seperti_yang_dikirim_browser_tetap_tersimpan(): void
+    public function test_skor_palsu_dari_klien_diabaikan_server(): void
     {
-        // REGRESI PENTING: browser mengirim ringkasan HANYA berisi
-        // {ringkasan, benar, salah, skor} — tanpa "pertanyaan" dan "tepat".
-        // Ketika validasi mewajibkan keduanya, setiap ringkasan ditolak 422
-        // sehingga XP game tidak pernah masuk ke XP kelompok.
+        // KEAMANAN: siswa tidak boleh bisa memalsukan hasil permainan.
+        // Klien hanya boleh mengirim daftar pilihan; angka benar/salah/skor
+        // apa pun yang ikut dikirim HARUS diabaikan.
         $team = $this->joinTeam();
         $mission = $this->bukaRonde(1);
 
         $response = $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
-            'ringkasan' => true,
-            'benar' => 8,
+            'jawaban' => $this->jawabanGame($mission, 1),
+            // Angka palsu: dikirim sengaja untuk menguji apakah dipercaya.
+            'benar' => 100,
             'salah' => 0,
-            'skor' => 120,
+            'skor' => 99999,
+            'ringkasan' => true,
+            'tepat' => true,
         ]);
 
         $response->assertOk();
-        $response->assertJsonPath('ok', true);
 
         $submission = Submission::query()->firstOrFail();
+        $totalSoal = $mission->gameQuestionCount();
 
-        $this->assertSame(8, $submission->game_correct);
-        $this->assertNotNull($submission->game_played_at);
+        // Server harus melaporkan hasil penilaiannya SENDIRI, bukan angka klien.
+        $this->assertSame(1, $submission->game_correct, 'Angka "benar" dari klien tidak boleh dipercaya.');
+        $this->assertSame($totalSoal - 1, $submission->game_wrong);
+        $this->assertSame(
+            1 * (int) config('tikmission.game_score_per_correct'),
+            $submission->game_score,
+            'Skor harus dihitung server, bukan dari "skor" kiriman klien.'
+        );
+        $this->assertLessThan(100, $submission->game_correct);
 
-        // XP kelompok WAJIB bertambah, dan jawabannya sudah ada untuk guru.
-        $this->assertGreaterThan(0, $team->fresh()->xp);
-        $this->assertStringContainsString('Hasil game', (string) $submission->answer);
+        // XP tetap dibatasi XP maksimum misi, bukan dari skor palsu.
+        $maksimum = $mission->xp + (int) config('tikmission.no_hint_bonus_xp');
+        $this->assertLessThanOrEqual($maksimum, $team->fresh()->xp);
+    }
+
+    public function test_kunci_jawaban_game_tidak_dikirim_ke_browser(): void
+    {
+        // KEAMANAN: kunci jawaban tidak boleh ada di HTML halaman game.
+        $this->joinTeam();
+        $mission = $this->bukaRonde(1);
+
+        $html = $this->get('/student/mission/'.$mission->id.'/game')->getContent();
+
+        $json = null;
+
+        if (preg_match('/<script type="application\/json" id="game-questions">(.*?)<\/script>/s', $html, $m)) {
+            $json = json_decode($m[1], true);
+        }
+
+        $this->assertIsArray($json, 'Data soal game harus dikirim sebagai JSON.');
+        $this->assertNotEmpty($json);
+
+        // Tiap soal hanya boleh berisi pertanyaan + pilihan.
+        foreach ($json as $soal) {
+            $this->assertArrayHasKey('pertanyaan', $soal);
+            $this->assertArrayHasKey('pilihan', $soal);
+            $this->assertArrayNotHasKey(
+                'jawaban',
+                $soal,
+                'Kunci jawaban TIDAK boleh ikut dikirim ke browser.'
+            );
+        }
     }
 
     public function test_xp_game_tetap_terkirim_saat_ronde_dihentikan_atau_waktu_habis(): void
@@ -639,7 +708,7 @@ class GameRondeTest extends TestCase
         $this->assertStringContainsString('Waktu sesi habis', $js);
 
         // Syaratnya: sudah menjawab sesuatu.
-        $this->assertStringContainsString('benar + salah === 0', $js);
+        $this->assertStringContainsString('catatanJawaban.length === 0', $js);
     }
 
     public function test_ringkasan_disimpan_dan_dikirim_ulang_bila_gagal_terkirim(): void
@@ -672,15 +741,21 @@ class GameRondeTest extends TestCase
         $this->assertStringContainsString('data-mission-order="1"', $html);
     }
 
-    public function test_jawaban_biasa_tetap_butuh_pertanyaan_dan_tepat(): void
+    public function test_jawaban_biasa_tetap_butuh_pertanyaan_dan_pilihan(): void
     {
-        // Pelonggaran validasi hanya untuk ringkasan: kiriman satu jawaban
-        // tetap harus lengkap, supaya catatan jawaban salah tidak rusak.
+        // Kiriman jawaban game harus berbentuk daftar {pertanyaan, pilihan}.
+        // Tanpa itu, tidak ada yang bisa dinilai server.
         $this->joinTeam();
         $mission = $this->bukaRonde(1);
 
+        // Tanpa kunci "jawaban" sama sekali.
         $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
             'pilihan' => 'Hardware',
+        ])->assertStatus(422);
+
+        // Daftar kosong juga ditolak.
+        $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
+            'jawaban' => [],
         ])->assertStatus(422);
     }
 
@@ -691,12 +766,7 @@ class GameRondeTest extends TestCase
 
         // Main game sampai selesai: server mengisi kolom jawaban dengan
         // ringkasan permainan supaya guru melihat hasilnya.
-        $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
-            'ringkasan' => true,
-            'benar' => 8,
-            'salah' => 0,
-            'skor' => 120,
-        ])->assertOk();
+        $this->mainkan($mission, 8)->assertOk();
 
         $this->assertStringContainsString(
             '[Hasil game',
@@ -722,14 +792,7 @@ class GameRondeTest extends TestCase
         $this->joinTeam();
         $mission = $this->bukaRonde(1);
 
-        $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
-            'ringkasan' => true,
-            'benar' => 6,
-            'salah' => 2,
-            'skor' => 200,
-            'pertanyaan' => 'ringkasan',
-            'tepat' => true,
-        ]);
+        $this->mainkan($mission, 6);
 
         $answer = Submission::query()->firstOrFail()->answer;
 
@@ -744,10 +807,8 @@ class GameRondeTest extends TestCase
         $teamBagus = $this->joinTeam('Tim Bagus');
         $missionA = $this->bukaRonde(1);
 
-        $this->postJson('/student/mission/'.$missionA->id.'/game-answer', [
-            'ringkasan' => true, 'benar' => 8, 'salah' => 0, 'skor' => 300,
-            'pertanyaan' => 'r', 'tepat' => true,
-        ]);
+        // Tim bagus: semua soal benar.
+        $this->mainkan($missionA, $missionA->gameQuestionCount());
 
         $xpBagus = $teamBagus->fresh()->xp;
 
@@ -755,10 +816,8 @@ class GameRondeTest extends TestCase
         app(RoundService::class)->openLobby($this->session);
 
         $teamLemah = $this->joinTeam('Tim Lemah');
-        $this->postJson('/student/mission/'.$missionA->id.'/game-answer', [
-            'ringkasan' => true, 'benar' => 1, 'salah' => 7, 'skor' => 30,
-            'pertanyaan' => 'r', 'tepat' => true,
-        ]);
+        // Tim lemah: hanya 1 soal benar.
+        $this->mainkan($missionA, 1);
 
         $this->assertGreaterThan(
             $teamLemah->fresh()->xp,
@@ -775,9 +834,9 @@ class GameRondeTest extends TestCase
         $mission = Mission::query()->where('order', 3)->firstOrFail();
 
         $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
-            'pertanyaan' => 'soal',
-            'pilihan' => 'x',
-            'tepat' => true,
+            'jawaban' => [
+                ['pertanyaan' => 'soal', 'pilihan' => 'x'],
+            ],
         ])->assertStatus(422);
     }
 
@@ -798,8 +857,9 @@ class GameRondeTest extends TestCase
         ]);
 
         $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
-            'pertanyaan' => 'soal',
-            'tepat' => true,
+            'jawaban' => [
+                ['pertanyaan' => 'soal', 'pilihan' => 'x'],
+            ],
         ])->assertStatus(422);
     }
 
@@ -871,11 +931,12 @@ class GameRondeTest extends TestCase
         $team = $this->joinTeam();
         $mission = $this->bukaRonde(1);
 
-        // Skor sangat besar tidak boleh melampaui XP maksimum misi (120).
+        // Bahkan bila klien mencoba mengirim angka palsu yang besar, XP tidak
+        // boleh melampaui XP maksimum misi.
         $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
-            'ringkasan' => true, 'benar' => 100, 'salah' => 0, 'skor' => 99999,
-            'pertanyaan' => 'r', 'tepat' => true,
-        ]);
+            'jawaban' => $this->jawabanGame($mission, $mission->gameQuestionCount()),
+            'benar' => 100, 'salah' => 0, 'skor' => 99999,
+        ])->assertOk();
 
         $maksimum = $mission->xp + (int) config('tikmission.no_hint_bonus_xp');
 
@@ -887,20 +948,14 @@ class GameRondeTest extends TestCase
         $team = $this->joinTeam();
         $mission = $this->bukaRonde(1);
 
-        // Main bagus dulu.
-        $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
-            'ringkasan' => true, 'benar' => 8, 'salah' => 0, 'skor' => 300,
-            'pertanyaan' => 'r', 'tepat' => true,
-        ]);
+        // Main bagus dulu: semua soal benar.
+        $this->mainkan($mission, $mission->gameQuestionCount());
 
         $xpTinggi = $team->fresh()->xp;
         $this->assertGreaterThan(0, $xpTinggi);
 
         // Main lagi dengan hasil jelek: XP tidak boleh turun.
-        $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
-            'ringkasan' => true, 'benar' => 0, 'salah' => 8, 'skor' => 0,
-            'pertanyaan' => 'r', 'tepat' => true,
-        ]);
+        $this->mainkan($mission, 0);
 
         $this->assertSame($xpTinggi, $team->fresh()->xp);
     }
@@ -926,10 +981,7 @@ class GameRondeTest extends TestCase
         $this->joinTeam();
         $mission = $this->bukaRonde(1);
 
-        $this->postJson('/student/mission/'.$mission->id.'/game-answer', [
-            'ringkasan' => true, 'benar' => 5, 'salah' => 3, 'skor' => 150,
-            'pertanyaan' => 'r', 'tepat' => true,
-        ]);
+        $this->mainkan($mission, 5);
 
         $submission = Submission::query()->firstOrFail();
 

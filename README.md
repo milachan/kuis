@@ -127,11 +127,16 @@ submissions        id, team_id→, mission_id→, answer, evidence_path, file_pa
 
 | Peran | Kredensial |
 | --- | --- |
-| **Guru** | `admin@example.com` / `password` |
-| **Sesi demo** | Kode: `TIK8-DEMO` (timer 60 menit, petunjuk aktif) |
+| **Guru** | Diatur lewat `TEACHER_EMAIL` / `TEACHER_PASSWORD` di `.env` |
+| **Sesi demo** | Kode: `TIK8-DEMO` (petunjuk aktif) |
 | **Siswa** | Cukup kode sesi + nama kelompok + nama anggota (tanpa akun) |
 
-> **Ganti password guru** sebelum dipakai sungguhan:
+> **Password guru tidak lagi memakai bawaan "password".**
+> Seeder membaca `TEACHER_EMAIL` dan `TEACHER_PASSWORD` dari `.env`.
+> Bila `TEACHER_PASSWORD` kosong, seeder membuat password acak kuat dan
+> menampilkannya **sekali** di layar saat seeding — simpan password itu.
+>
+> Untuk mengganti password guru kapan saja:
 > `php artisan tinker --execute="\App\Models\User::where('email','admin@example.com')->update(['password'=>bcrypt('PASSWORD-BARU')]);"`
 
 ---

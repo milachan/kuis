@@ -36,10 +36,8 @@ return [
     // Batas panjang jawaban yang dikirim ke AI (karakter) agar hemat token.
     'max_answer_chars' => (int) env('AI_MAX_ANSWER_CHARS', 2000),
 
-    // Bobot XP: berapa persen dari XP dasar misi yang diberikan
-    // saat AI memberi skor 100. Sisa XP tetap menunggu validasi bukti guru.
-    // Contoh: XP misi 100, bobot 70 -> skor AI 80 memberi 56 XP.
-    'xp_weight_percent' => (int) env('AI_XP_WEIGHT_PERCENT', 70),
+    // Catatan: bobot XP dari skor AI diatur di config/tikmission.php
+    // (kunci `ai_xp_weight_percent`), supaya semua bobot XP ada di satu tempat.
 
     // Skor minimum agar jawaban dianggap lulus oleh AI (untuk informasi guru).
     'passing_score' => (int) env('AI_PASSING_SCORE', 60),
