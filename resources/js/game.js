@@ -488,6 +488,18 @@
         let salah = 0;
         let soalSekarang = null;
 
+        // Apakah game sedang DIBEKUKAN supaya anak bisa membaca soal dengan
+        // tenang. Saat dibekukan, `game.langkah()` tidak dipanggil, jadi ular /
+        // bola / burung tidak menabrak sementara anak berpikir.
+        let soalTerbuka = false;
+
+        // Batas nyawa. Ronde TIDAK berakhir saat nyawa habis — anak hanya
+        // kehilangan "nyawa" sebagai mekanik game, lalu nyawa diisi ulang dan
+        // sisa soal tetap bisa dikerjakan. Ronde baru benar-benar selesai bila
+        // SEMUA soal sudah dijawab benar. Dengan begitu tidak ada lagi kejadian
+        // "baru 2 soal sudah selesai".
+        const NYAWA_AWAL = 3;
+
         // Catatan SETIAP pilihan yang ditekan anak selama ronde ini.
         // Inilah satu-satunya data yang dikirim ke server. Server menilai
         // ulang memakai kunci jawaban misi, jadi anak tidak bisa memalsukan
@@ -510,9 +522,19 @@
         const intervalLangkah = jenis === 'snake' ? 130 : 16;
 
         function perbaruiStatistik() {
-            elNyawa.textContent = '❤️'.repeat(Math.max(0, nyawa)) + '🖤'.repeat(Math.max(0, 3 - nyawa));
+            elNyawa.textContent = '❤️'.repeat(Math.max(0, nyawa)) + '🖤'.repeat(Math.max(0, NYAWA_AWAL - nyawa));
             elSkor.textContent = game.skor;
             elBenar.textContent = benar;
+        }
+
+        // Sisa soal yang belum dijawab benar pada ronde ini.
+        function sisaSoal() {
+            return tumpukan.length + (soalSekarang ? 1 : 0);
+        }
+
+        // Apakah SEMUA soal ronde ini sudah dijawab benar.
+        function semuaSoalSelesai() {
+            return tumpukan.length === 0 && soalSekarang === null;
         }
 
         // -----------------------------------------------------------------
@@ -585,6 +607,11 @@
             return tumpukan.shift() || null;
         }
 
+        // Nomor soal yang sedang ditampilkan (1..jumlah soal). Dipakai untuk
+        // label "Soal 3 dari 8" — dihitung dari POSISI soal, bukan dari jumlah
+        // jawaban benar, supaya angkanya tetap benar walau anak menjawab salah.
+        let nomorSoal = 0;
+
         function tampilkanSoal() {
             if (soal.length === 0) {
                 elSoal.textContent = 'Tidak ada soal untuk ronde ini.';
@@ -594,14 +621,29 @@
 
             const berikutnya = ambilSoal();
 
-            // Semua soal ronde sudah dijawab benar: ronde tuntas.
+            // Semua soal ronde sudah dijawab benar: inilah SATU-SATUNYA sebab
+            // ronde dianggap selesai. Kehabisan nyawa tidak lagi mengakhiri ronde.
             if (!berikutnya) {
+                soalSekarang = null;
                 selesai('Semua soal selesai');
                 return;
             }
 
             soalSekarang = berikutnya;
+            nomorSoal += 1;
+
+            // Soal baru terbuka: beri jeda singkat gerak game supaya anak sempat
+            // MEMBACA soal dulu tanpa langsung menabrak. Setelah jeda, game
+            // berjalan lagi — jadi permainan tetap "hidup", bukan beku total.
+            soalTerbuka = true;
+
             gambarSoal();
+            perbaruiStatistik();
+
+            setTimeout(function () {
+                // Hanya buka beku bila soal ini masih yang sedang aktif.
+                if (soalSekarang === berikutnya) soalTerbuka = false;
+            }, 2500);
         }
 
         // Gambar soal yang sedang aktif beserta tombol pilihannya.
@@ -609,7 +651,9 @@
         function gambarSoal() {
             if (!soalSekarang) return;
 
-            elSoal.textContent = soalSekarang.pertanyaan;
+            // Label posisi soal (mis. "Soal 3 dari 8"), dihitung dari posisi.
+            elSoal.textContent =
+                'Soal ' + Math.min(nomorSoal, soal.length) + ' dari ' + soal.length + ': ' + soalSekarang.pertanyaan;
             elPilihan.innerHTML = '';
 
             soalSekarang.pilihan.forEach(function (teks, i) {
@@ -645,6 +689,16 @@
             });
         }
 
+        // Nyawa habis BUKAN akhir ronde: nyawa diisi ulang dan anak melanjutkan
+        // sisa soal. Ronde hanya selesai bila semua soal sudah dijawab benar.
+        function isiUlangNyawa() {
+            nyawa = NYAWA_AWAL;
+            perbaruiStatistik();
+
+            window.TikToast &&
+                window.TikToast('Nyawa habis, tapi permainan tetap lanjut! Nyawa sudah diisi ulang. Ayo kerjakan sisa soal.', 'info');
+        }
+
         function jawab(pilihan) {
             if (!jalan || tungguJawab || !soalSekarang) return;
 
@@ -675,6 +729,8 @@
                 // habis, tampilkanSoal() yang menutup ronde.
                 setTimeout(function () {
                     tungguJawab = false;
+                    // Bekukan sebentar saat berganti soal baru (diatur di
+                    // tampilkanSoal()), lalu game berjalan lagi.
                     tampilkanSoal();
                 }, 900);
 
@@ -682,22 +738,33 @@
             }
 
             // Salah: nyawa berkurang, lalu soal yang SAMA ditawarkan lagi supaya
-            // kelompok bisa berdiskusi dulu sebelum mencoba ulang.
+            // kelompok bisa berdiskusi dulu sebelum mencoba ulang. Anak tetap
+            // melanjutkan permainan walau nyawanya habis.
+            //
+            // PENTING: `soalTerbuka` TIDAK diubah di sini. Soal ini sudah
+            // dibiarkan terbaca (beku sebentar saat muncul), lalu game berjalan
+            // lagi. Anak boleh mengulang menjawab sambil game tetap bergerak.
             salah += 1;
             nyawa -= 1;
             elPesan.textContent = '❌ Belum tepat. ' + soalSekarang.pilihan[soalSekarang.jawaban];
             elPesan.className = 'text-sm font-black text-coral-500';
             window.TikSound && window.TikSound.play('error');
 
-            perbaruiStatistik();
+            const nyawaHabis = nyawa <= 0;
+            if (nyawaHabis) isiUlangNyawa();
 
-            if (nyawa <= 0) {
-                selesai('Semua nyawa habis');
-                return;
-            }
+            perbaruiStatistik();
 
             setTimeout(function () {
                 tungguJawab = false;
+
+                // Nyawa habis: ulang posisi game, lalu tawarkan soal yang sama lagi.
+                if (nyawaHabis) {
+                    const simpanSkor = game.skor;
+                    game.reset();
+                    game.skor = simpanSkor;
+                }
+
                 gambarSoal();
             }, 900);
         }
@@ -705,8 +772,10 @@
         function loop(waktu) {
             if (!jalan) return;
 
-            // Langkah game hanya tiap interval (snake lebih lambat).
-            if (waktu - waktuLangkah >= intervalLangkah) {
+            // Langkah game hanya tiap interval (snake lebih lambat), dan TIDAK
+            // berjalan selama sebuah soal terbuka. Ini memberi anak waktu
+            // membaca/mendiskusikan soal tanpa ularnya menabrak.
+            if (!soalTerbuka && waktu - waktuLangkah >= intervalLangkah) {
                 waktuLangkah = waktu;
 
                 const hasil = game.langkah();
@@ -717,8 +786,20 @@
 
                     window.TikSound && window.TikSound.play('error');
 
+                    // Kehabisan nyawa TIDAK mengakhiri ronde: nyawa diisi ulang,
+                    // posisi game direset, dan anak melanjutkan soal yang sama.
                     if (nyawa <= 0) {
-                        selesai('Nyawa habis');
+                        isiUlangNyawa();
+
+                        const simpanSkor = game.skor;
+                        game.reset();
+                        game.skor = simpanSkor;
+                        elPesan.textContent = 'Nyawa habis, diisi ulang. Lanjutkan soal ini.';
+                        elPesan.className = 'text-sm font-black text-sun-500';
+
+                        game.gambar();
+                        loopId = requestAnimationFrame(loop);
+
                         return;
                     }
 
@@ -726,7 +807,7 @@
                     const simpanSkor = game.skor;
                     game.reset();
                     game.skor = simpanSkor;
-                    elPesan.textContent = '⚠️ Hati-hati! Nyawa berkurang.';
+                    elPesan.textContent = '⚠️ Hati-hati! Nyawa berkurang (bukan karena jawaban).';
                     elPesan.className = 'text-sm font-black text-sun-500';
                 }
             }
@@ -749,17 +830,33 @@
             batalHitungMundur();
             if (elHasil) elHasil.hidden = true;
 
-            nyawa = 3;
-            benar = 0;
-            salah = 0;
-            // Mulai catatan jawaban baru; server akan menilai daftar ini.
-            catatanJawaban = [];
-            // Daftar soal disiapkan ulang SETIAP ronde. Sebelumnya daftar ini
-            // ikut "diisi ulang" saat habis dan counter soalnya tidak di-reset,
-            // sehingga ronde hanya bertahan satu jawaban benar (dan makin pendek
-            // setiap kali menekan Main Lagi).
-            tumpukan = acak(soal);
+            // PENTING: memulai (atau mengulang) permainan TIDAK menghapus
+            // catatan jawaban yang sudah ada. Dulu catatan ini dikosongkan di
+            // sini, sehingga hasil main pertama hilang dan server hanya menilai
+            // sesi terakhir. Sekarang catatan dikumpulkan sampai ronde benar-
+            // benar selesai.
+            //
+            // Karena itu daftar soal hanya diisi bila belum ada sesi berjalan:
+            // menekan "Main Lagi" di tengah ronde melanjutkan sisa soal, bukan
+            // memulai daftar dari nol.
+            const sesiBaru = catatanJawaban.length === 0 || semuaSoalSelesai();
+
+            nyawa = NYAWA_AWAL;
             tungguJawab = false;
+            soalTerbuka = false;
+
+            if (sesiBaru) {
+                benar = 0;
+                salah = 0;
+                nomorSoal = 0;
+                catatanJawaban = [];
+                // Daftar soal disiapkan ulang SETIAP sesi baru.
+                tumpukan = acak(soal);
+                soalSekarang = null;
+            }
+
+            // Kalau ada soal yang masih terbuka (Main Lagi di tengah ronde),
+            // tetap tawarkan soal itu.
             game.reset();
             perbaruiStatistik();
 
@@ -767,7 +864,11 @@
             btnMulai.classList.add('hidden');
             panelSoal.classList.remove('opacity-50');
 
-            tampilkanSoal();
+            if (soalSekarang) {
+                gambarSoal();
+            } else {
+                tampilkanSoal();
+            }
 
             elPesan.textContent = 'Baca soal, lalu pilih jawaban yang benar!';
             elPesan.className = 'text-sm font-black text-sky-600';
@@ -896,10 +997,11 @@
         // -----------------------------------------------------------------
         // Ronde berhenti saat anak masih bermain
         // -----------------------------------------------------------------
-        // XP hanya tersimpan setelah ringkasan terkirim. Guru bisa menekan
-        // "Hentikan Ronde", atau timer ronde/sesi habis, sementara anak masih
-        // bermain. Dalam kasus itu ringkasannya dikirim sekarang juga — asal
-        // anak sudah menjawab minimal satu soal.
+        // Guru bisa menekan "Hentikan Ronde", atau timer ronde/sesi habis,
+        // sementara anak masih bermain. Dalam kasus itu hasil yang sudah
+        // dikerjakan dikirim sekarang juga — asal anak sudah menjawab sesuatu —
+        // supaya XP-nya tidak hilang. Panel yang muncul adalah "permainan
+        // dihentikan", BUKAN "ronde selesai", karena soal belum tentu habis.
         function awasiBerhentinyaRonde() {
             if (!roundUrl) return;
 
@@ -919,7 +1021,7 @@
                     const data = await res.json();
 
                     if (data.session_ended) {
-                        selesai('Sesi kelas berakhir');
+                        dihentikan('Sesi kelas berakhir');
                         return;
                     }
 
@@ -934,29 +1036,39 @@
                     // yang masuk terlambat dengan jatah waktunya sendiri —
                     // timer kelas/ronde TIDAK boleh menghentikan permainan.
                     if (data.work_allowed === false) {
-                        selesai(masihTerbuka ? 'Waktu ronde habis' : 'Ronde dihentikan guru');
+                        dihentikan(masihTerbuka ? 'Waktu ronde habis' : 'Ronde dihentikan guru');
                         return;
                     }
 
                     // Cadangan untuk halaman yang belum mengirim `work_allowed`.
                     if (data.accepts_submissions === false) {
-                        selesai('Waktu sesi habis');
+                        dihentikan('Waktu sesi habis');
                         return;
                     }
 
                     if (!masihTerbuka || data.status === 'ended') {
-                        selesai('Ronde dihentikan guru');
+                        dihentikan('Ronde dihentikan guru');
                         return;
                     }
 
                     // Timer ronde habis (round_status masih running, tapi waktu habis).
                     if (data.is_running === false) {
-                        selesai('Waktu ronde habis');
+                        dihentikan('Waktu ronde habis');
                     }
                 } catch (e) {
                     // Jaringan sempat putus; coba lagi siklus berikutnya.
                 }
             }, 10000);
+        }
+
+        // Permainan dihentikan dari luar (guru/waktu), bukan karena soal habis.
+        // Hasil yang sudah dikerjakan tetap dikirim, tapi panel hasil TIDAK
+        // mengaku "ronde selesai" — supaya anak/guru tidak salah paham bahwa
+        // semua soal sudah tuntas.
+        function dihentikan(sebab) {
+            if (!jalan) return;
+
+            selesai(sebab, { dihentikan: true });
         }
 
         // Usaha terakhir saat tab ditutup / halaman ditinggalkan di tengah
@@ -984,36 +1096,57 @@
             }
         });
 
-        function tampilkanHasil(sebab) {
+        function tampilkanHasil(sebab, dihentikanGuru) {
             const total = benar + salah;
             const akurasi = total > 0 ? Math.round((benar / total) * 100) : 0;
 
             // Bintang mengikuti akurasi: 90% ke atas dapat tiga bintang.
             const bintang = akurasi >= 90 ? 3 : (akurasi >= 70 ? 2 : 1);
 
+            // Jumlah soal di ronde ini: kalau tidak dihentikan, semua soal sudah
+            // dijawab benar; kalau dihentikan, sisa soal mungkin masih ada.
+            const totalSoal = soal.length;
+            const sisa = dihentikanGuru ? sisaSoal() : 0;
+
             if (elHasilBintang) {
-                elHasilBintang.textContent = '⭐'.repeat(bintang) + '☆'.repeat(3 - bintang);
+                elHasilBintang.textContent = dihentikanGuru
+                    ? '⏸️'
+                    : '⭐'.repeat(bintang) + '☆'.repeat(3 - bintang);
             }
 
             if (elHasilJudul) {
-                elHasilJudul.textContent = bintang === 3
-                    ? 'Luar biasa! Ronde selesai!'
-                    : (bintang === 2 ? 'Bagus! Ronde selesai!' : 'Ronde selesai!');
+                if (dihentikanGuru) {
+                    // Jangan mengaku "selesai" kalau soal belum tentu habis.
+                    elHasilJudul.textContent = 'Permainan dihentikan';
+                    elHasilJudul.className = 'mt-0.5 text-lg font-black text-sun-500';
+                } else {
+                    elHasilJudul.textContent = bintang === 3
+                        ? 'Luar biasa! Ronde selesai!'
+                        : (bintang === 2 ? 'Bagus! Ronde selesai!' : 'Ronde selesai!');
+                    elHasilJudul.className = 'mt-0.5 text-lg font-black text-mint-600';
+                }
             }
 
             if (elHasilSebab) {
-                elHasilSebab.textContent =
-                    sebab + ' · jawaban benar ' + benar + ' dari ' + total + ' soal';
+                elHasilSebab.textContent = dihentikanGuru
+                    ? sebab + ' · kamu menjawab benar ' + benar + ' soal' +
+                      (sisa > 0 ? ', masih ada ' + sisa + ' soal belum selesai.' : '.')
+                    : sebab + ' · jawaban benar ' + benar + ' dari ' + totalSoal + ' soal';
             }
 
-            if (elHasilBenar) elHasilBenar.textContent = benar + '/' + total;
+            if (elHasilBenar) {
+                elHasilBenar.textContent = dihentikanGuru
+                    ? benar + ' soal'
+                    : benar + '/' + totalSoal;
+            }
+
             if (elHasilAkurasi) elHasilAkurasi.textContent = akurasi + '%';
             if (elHasilSkor) elHasilSkor.textContent = String(game.skor);
             if (elHasilXp) elHasilXp.textContent = '…';
 
             if (elHasil) elHasil.hidden = false;
 
-            hujanKonfeti();
+            if (!dihentikanGuru) hujanKonfeti();
 
             // XP baru diketahui setelah server mencatat hasilnya. Angka yang
             // ditampilkan di sini adalah hasil PENILAIAN SERVER, bukan hitungan
@@ -1027,20 +1160,19 @@
                         ? Math.round((benarResmi / totalResmi) * 100)
                         : 0;
 
-                    if (elHasilBenar) elHasilBenar.textContent = benarResmi + '/' + totalResmi;
+                    if (elHasilBenar && !dihentikanGuru) {
+                        elHasilBenar.textContent = benarResmi + '/' + totalSoal;
+                    }
                     if (elHasilAkurasi) elHasilAkurasi.textContent = akurasiResmi + '%';
                     if (elHasilSkor) elHasilSkor.textContent = String(data.skor);
-                    if (elHasilSebab) {
-                        elHasilSebab.textContent =
-                            sebab + ' · jawaban benar ' + benarResmi + ' dari ' + totalResmi + ' soal';
-                    }
 
                     if (elHasilXp) elHasilXp.textContent = '+' + data.xp_gain + ' XP';
 
                     if (elHasilXpRincian) {
-                        elHasilXpRincian.textContent =
-                            'Total XP misi ini ' + data.xp + ' · total XP kelompok ' + data.total_xp +
-                            '. Tulis soal uraian ronde ini untuk menambah XP sampai maksimum misi.';
+                        elHasilXpRincian.textContent = dihentikanGuru
+                            ? 'Hasil yang sudah kamu kerjakan sudah tersimpan. Buka lagi ronde ini saat guru membukanya untuk melanjutkan sisa soal.'
+                            : 'Total XP misi ini ' + data.xp + ' · total XP kelompok ' + data.total_xp +
+                              '. Tulis soal uraian ronde ini untuk menambah XP sampai maksimum misi.';
                     }
 
                     return;
@@ -1054,11 +1186,25 @@
                 }
             });
 
-            mulaiHitungMundur(10);
+            // Hanya arahkan pindah ke soal uraian bila ronde memang benar-benar
+            // tuntas. Kalau dihentikan, biarkan anak di halaman ini.
+            if (!dihentikanGuru) {
+                mulaiHitungMundur(10);
+            }
         }
 
-        function selesai(sebab) {
+        // Dipanggil ketika permainan selesai / dihentikan.
+        //   - `opsi.dihentikan` = true -> permainan dihentikan guru / waktu habis
+        //     (soal belum tentu habis).
+        //   - selain itu -> SEMUA soal sudah dijawab benar (ronde benar-benar tuntas).
+        //
+        // Kehabisan nyawa TIDAK memanggil fungsi ini lagi.
+        function selesai(sebab, opsi) {
+            const dihentikanGuru = !!(opsi && opsi.dihentikan);
+
             jalan = false;
+            soalTerbuka = false;
+            soalSekarang = null;
 
             if (loopId) {
                 cancelAnimationFrame(loopId);
@@ -1073,13 +1219,20 @@
             // Tombol mulai digantikan papan hasil (tombol Main Lagi ada di sana).
             btnMulai.classList.add('hidden');
 
-            elPesan.textContent = '🏁 Ronde selesai (' + sebab + ').';
-            elPesan.className = 'text-sm font-black text-ink-800';
+            if (dihentikanGuru) {
+                elPesan.textContent = '⏸️ Permainan dihentikan (' + sebab + ').';
+                elPesan.className = 'text-sm font-black text-sun-500';
+                window.TikSound && window.TikSound.play('error');
+                window.TikToast &&
+                    window.TikToast('Permainan dihentikan. Hasil yang sudah kamu kerjakan tetap dicatat.', 'warning');
+            } else {
+                elPesan.textContent = '🏁 Ronde selesai (' + sebab + ').';
+                elPesan.className = 'text-sm font-black text-ink-800';
+                window.TikSound && window.TikSound.play('complete');
+                window.TikToast && window.TikToast('Ronde selesai! Lanjut ke soal uraian ya.', 'info');
+            }
 
-            window.TikSound && window.TikSound.play('complete');
-            window.TikToast && window.TikToast('Ronde selesai! Lanjut ke soal uraian ya.', 'info');
-
-            tampilkanHasil(sebab);
+            tampilkanHasil(sebab, dihentikanGuru);
         }
 
         // -----------------------------------------------------------------
@@ -1087,12 +1240,21 @@
         // -----------------------------------------------------------------
         btnMulai.addEventListener('click', mulaiMain);
 
-        // "Main Lagi" dari papan hasil: batalkan arahan pindah ronde dulu,
-        // supaya hitungan mundur tidak memindahkan anak di tengah permainan.
+        // "Main Lagi" dari papan hasil: memulai sesi permainan BARU — daftar
+        // soal diacak ulang dari awal, skor main nol, dan catatan jawaban
+        // dikosongkan (karena kiriman sebelumnya sudah dinilai & terkirim).
         if (btnHasilUlang) {
             btnHasilUlang.addEventListener('click', function () {
                 if (elHasil) elHasil.hidden = true;
                 batalHitungMundur();
+
+                // Tandai sesi selesai supaya mulaiMain() menyiapkan sesi baru.
+                benar = 0;
+                salah = 0;
+                catatanJawaban = [];
+                tumpukan = [];
+                soalSekarang = null;
+
                 mulaiMain();
             });
         }

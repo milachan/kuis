@@ -136,7 +136,7 @@
 
                                         <div class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                                             <div class="rounded-2xl border-2 border-sky-100 bg-sky-50 px-2 py-1.5">
-                                                <p class="text-[10px] font-bold uppercase tracking-wider text-ink-500">Jawaban Benar</p>
+                                                <p class="text-[10px] font-bold uppercase tracking-wider text-ink-500">Soal Benar</p>
                                                 <p id="hasil-benar" class="text-base font-black text-ink-800">0</p>
                                             </div>
                                             <div class="rounded-2xl border-2 border-sky-100 bg-sky-50 px-2 py-1.5">
@@ -253,9 +253,10 @@
                         <li>1. Tekan <strong>Mulai Bermain</strong> (layar jadi penuh).</li>
                         <li>2. Satu anak fokus menjaga nyawa (pakai keyboard), yang lain cari jawaban.</li>
                         <li>3. Pilih jawaban benar agar tenaga &amp; skor bertambah.</li>
-                        <li>4. Jawaban <strong>salah</strong> mengurangi nyawa.</li>
-                        <li>5. Saat game selesai, papan hasil muncul: tekan <strong>📝 Lanjut Kerjakan Soal Uraian</strong>
-                            (otomatis pindah dalam 10 detik, atau <strong>🔁 Main Lagi</strong> untuk mengulang).</li>
+                        <li>4. Jawaban <strong>salah</strong> atau menabrak mengurangi nyawa — tapi <strong>nyawa akan diisi ulang</strong>,
+                            jadi permainan <strong>tidak berhenti</strong> sebelum semua soal selesai.</li>
+                        <li>5. Soal jadi <strong>berhenti dulu</strong> saat muncul, supaya bisa dibaca tenang. Ronde selesai
+                            setelah <strong>semua soal</strong> dijawab benar.</li>
                     </ul>
                 </div>
 

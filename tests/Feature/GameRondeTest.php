@@ -328,6 +328,114 @@ class GameRondeTest extends TestCase
         );
     }
 
+    // -----------------------------------------------------------------
+    // REGRESI: kehabisan nyawa TIDAK boleh mengakhiri ronde
+    // -----------------------------------------------------------------
+    // Dulu jawaban salah / menabrak mengurangi nyawa (cuma 3) dan saat nyawa
+    // habis ronde langsung "selesai", padahal sebagian besar soal belum
+    // dikerjakan. Sekarang nyawa diisi ulang dan ronde hanya berakhir bila
+    // SEMUA soal sudah dijawab benar.
+
+    public function test_kehabisan_nyawa_tidak_mengakhiri_permainan(): void
+    {
+        $js = file_get_contents(resource_path('js/game.js'));
+
+        // Nyawa habis -> isi ulang, bukan selesai().
+        $this->assertStringContainsString('isiUlangNyawa', $js);
+
+        // Nyawa habis tidak boleh memanggil selesai().
+        $this->assertDoesNotMatchRegularExpression(
+            '/nyawa <= 0[\s\S]{0,80}?selesai\(/',
+            $js,
+            'Kehabisan nyawa tidak boleh memanggil selesai(); ronde hanya '
+            .'selesai setelah semua soal dijawab benar.'
+        );
+
+        // Pesan "nyawa habis" harus menyatakan permainan tetap lanjut.
+        $this->assertStringContainsString('Nyawa habis, diisi ulang', $js);
+        $this->assertStringContainsString('permainan tetap lanjut', $js);
+    }
+
+    public function test_permainan_dibekukan_saat_soal_terbuka(): void
+    {
+        $js = file_get_contents(resource_path('js/game.js'));
+
+        // Gerak game hanya berjalan bila soal TIDAK sedang terbuka, supaya
+        // anak bisa membaca/mendiskusikan soal tanpa karakternya menabrak.
+        $this->assertMatchesRegularExpression(
+            '/if \(!soalTerbuka && waktu - waktuLangkah >= intervalLangkah\)/',
+            $js,
+            'loop() harus berhenti melangkah selama soal terbuka.'
+        );
+
+        // Dan soal harus menampilkan nomor urut / progres supaya anak tahu
+        // masih ada berapa soal lagi.
+        $this->assertStringContainsString('dari ', $js);
+    }
+
+    public function test_permainan_tidak_beku_terus_menerus(): void
+    {
+        // REGRESI: versi sebelumnya men-set `soalTerbuka = true` saat soal
+        // muncul dan TIDAK pernah melepasnya, sehingga permainan tidak pernah
+        // bergerak sama sekali ("game tidak jalan").
+        $js = file_get_contents(resource_path('js/game.js'));
+
+        // Beku harus DILEPAS otomatis (ada setTimeout yang mengeset false),
+        // bukan hanya di-set true.
+        $this->assertMatchesRegularExpression(
+            '/setTimeout\([\s\S]{0,200}?soalTerbuka = false;/',
+            $js,
+            'Beku saat soal muncul harus dilepas otomatis lewat setTimeout().'
+        );
+    }
+
+    public function test_nomor_soal_dihitung_dari_posisi_bukan_jawaban_benar(): void
+    {
+        // REGRESI: label soal dulu memakai (benar + 1), sehingga saat anak
+        // menjawab SALAH angkanya tidak maju / salah. Sekarang harus dihitung
+        // dari posisi soal lewat counter `nomorSoal`.
+        $js = file_get_contents(resource_path('js/game.js'));
+
+        $this->assertStringContainsString('nomorSoal += 1', $js);
+        $this->assertStringContainsString("'Soal ' + Math.min(nomorSoal, soal.length)", $js);
+
+        // Tidak boleh lagi memakai (benar + 1) sebagai nomor soal.
+        $this->assertStringNotContainsString("'[' + (benar + 1) + ' dari '", $js);
+    }
+
+    public function test_permainan_dihentikan_guru_tidak_mengaku_ronde_selesai(): void
+    {
+        $js = file_get_contents(resource_path('js/game.js'));
+
+        // Ada jalur terpisah untuk "dihentikan" guru/waktu.
+        $this->assertStringContainsString('dihentikan(', $js);
+        $this->assertStringContainsString('Permainan dihentikan', $js);
+
+        // Label "ronde selesai" tidak boleh dipakai untuk kasus dihentikan:
+        // judul panel diganti saat dihentikan.
+        $this->assertStringContainsString(
+            "elHasilJudul.textContent = 'Permainan dihentikan'",
+            $js
+        );
+    }
+
+    public function test_pesan_hasil_tidak_menulis_selesai_saat_dihentikan(): void
+    {
+        $js = file_get_contents(resource_path('js/game.js'));
+
+        // saat dihentikan, panel TIDAK memakai judul "Ronde selesai".
+        $this->assertStringNotContainsString(
+            "elHasilJudul.textContent = 'Ronde selesai'",
+            $js
+        );
+
+        // dan tidak memulai hitung mundur pindah ke soal uraian.
+        $this->assertMatchesRegularExpression(
+            '/if \(!dihentikanGuru\) \{\s*\n\s*mulaiHitungMundur\(10\);/',
+            $js
+        );
+    }
+
     public function test_gaya_layar_penuh_tersedia_di_css(): void
     {
         $css = file_get_contents(resource_path('css/app.css'));
@@ -567,7 +675,7 @@ class GameRondeTest extends TestCase
         $js = file_get_contents(resource_path('js/game.js'));
 
         $this->assertMatchesRegularExpression(
-            '/batalHitungMundur\(\);\s*\n\s*mulaiMain\(\);/',
+            '/btnHasilUlang\.addEventListener\([\s\S]*?batalHitungMundur\(\);[\s\S]*?mulaiMain\(\);/',
             $js,
             'Tombol Main Lagi harus membatalkan hitung mundur sebelum memulai ulang.'
         );
