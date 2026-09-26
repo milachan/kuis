@@ -716,6 +716,60 @@ class GameRondeTest extends TestCase
         $this->assertStringContainsString('catatanJawaban.length === 0', $js);
     }
 
+    public function test_status_ronde_menyatakan_ronde_masih_boleh_dikerjakan(): void
+    {
+        $this->joinTeam();
+        $mission = $this->bukaRonde(1);
+
+        $response = $this->getJson('/student/round-status?mission='.$mission->id);
+
+        $response->assertOk();
+        $response->assertJsonPath('work_allowed', true);
+    }
+
+    public function test_status_ronde_menyatakan_ronde_tertutup_tidak_boleh_dikerjakan(): void
+    {
+        $this->joinTeam();
+        $mission = $this->bukaRonde(1);
+
+        // Guru menutup semua ronde.
+        app(RoundService::class)->closeAllRounds($this->session);
+
+        $response = $this->getJson('/student/round-status?mission='.$mission->id);
+
+        $response->assertOk();
+        $response->assertJsonPath('work_allowed', false);
+    }
+
+    public function test_timer_kelas_habis_tidak_menghentikan_kelompok_dengan_jatah_waktu_sendiri(): void
+    {
+        // Inilah bug yang dilaporkan: timer kelas & timer ronde sudah habis,
+        // TETAPI server masih menerima pekerjaan kelompok yang baru mulai
+        // (masuk terlambat). Permainan tidak boleh dihentikan lebih dulu oleh
+        // klien hanya karena timer kelas mati.
+        $team = $this->joinTeam();
+        $mission = $this->bukaRonde(1);
+
+        // Jam kelas sudah lewat 2 jam, timer ronde juga sudah lewat.
+        $this->session->update([
+            'duration_minutes' => 60,
+            'start_time' => now()->subHours(3),
+            'round_started_at' => now()->subMinutes(30),
+        ]);
+
+        // Kelompok ini baru mulai mengerjakan ronde SETELAH jam kelas lewat.
+        $progress = $team->progress()->where('mission_id', $mission->id)->firstOrFail();
+        $progress->update(['work_started_at' => now()]);
+
+        $response = $this->getJson('/student/round-status?mission='.$mission->id);
+
+        $response->assertOk();
+        // Timer ronde memang mati...
+        $response->assertJsonPath('is_running', false);
+        // ...tapi server masih menerima, jadi klien harus ikut mengizinkan.
+        $response->assertJsonPath('work_allowed', true);
+    }
+
     public function test_ringkasan_disimpan_dan_dikirim_ulang_bila_gagal_terkirim(): void
     {
         $js = file_get_contents(resource_path('js/game.js'));

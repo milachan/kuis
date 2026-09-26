@@ -66,7 +66,7 @@ class MissionController extends Controller
      * Dipakai halaman misi & dashboard agar otomatis berpindah ketika guru
      * membuka ronde baru, sehingga murid tidak tertinggal di ronde lama.
      */
-    public function roundStatus()
+    public function roundStatus(Request $request)
     {
         $team = $this->studentAuth->currentTeam();
         $session = $team->gameSession;
@@ -106,9 +106,31 @@ class MissionController extends Controller
                 ])
                 ->exists();
 
+        // Bila halaman game menyebutkan misinya, hitung apakah kelompok ini
+        // MASIH boleh mengerjakan ronde itu. Aturannya sama persis dengan
+        // penjaga halaman game (status progres + jatah waktu kelompok,
+        // termasuk murid yang masuk terlambat). Klien memakai nilai ini supaya
+        // tidak menghentikan permainan yang masih diterima server.
+        $missionId = (int) $request->query('mission');
+        $workAllowed = null;
+
+        if ($missionId > 0) {
+            $progress = TeamProgress::query()
+                ->where('team_id', $team->id)
+                ->where('mission_id', $missionId)
+                ->first();
+
+            $workAllowed = $progress !== null
+                && $progress->canSubmit()
+                && $session->acceptsSubmissionsFor($team, $progress);
+        }
+
         return response()->json([
             'round' => $currentRound,
             'total' => $rounds->totalRounds(),
+            // Apakah kelompok ini masih boleh mengerjakan ronde yang disebut
+            // lewat ?mission=... (null bila tidak diminta).
+            'work_allowed' => $workAllowed,
             'status' => $session->round_status,
             'is_running' => $session->isRoundRunning(),
             'seconds_remaining' => $session->roundSecondsRemaining(),

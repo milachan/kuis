@@ -923,13 +923,26 @@
                         return;
                     }
 
+                    const masihTerbuka = (data.open_rounds || [])
+                        .some((r) => parseInt(r.order, 10) === missionOrder);
+
+                    // Server sudah menghitung apakah kelompok ini masih boleh
+                    // mengerjakan RONDE INI (`work_allowed`, dikirim karena
+                    // halaman game menyertakan ?mission=...). Klien memakai
+                    // hasil yang sama supaya tidak ada beda pendapat dengan
+                    // server: selama server masih menerima — mis. kelompok
+                    // yang masuk terlambat dengan jatah waktunya sendiri —
+                    // timer kelas/ronde TIDAK boleh menghentikan permainan.
+                    if (data.work_allowed === false) {
+                        selesai(masihTerbuka ? 'Waktu ronde habis' : 'Ronde dihentikan guru');
+                        return;
+                    }
+
+                    // Cadangan untuk halaman yang belum mengirim `work_allowed`.
                     if (data.accepts_submissions === false) {
                         selesai('Waktu sesi habis');
                         return;
                     }
-
-                    const masihTerbuka = (data.open_rounds || [])
-                        .some((r) => parseInt(r.order, 10) === missionOrder);
 
                     if (!masihTerbuka || data.status === 'ended') {
                         selesai('Ronde dihentikan guru');

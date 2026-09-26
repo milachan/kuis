@@ -57,7 +57,7 @@
     <div id="game-root"
          data-game="{{ $mission->game_type }}"
          data-answer-url="{{ route('student.mission.game.answer', $mission) }}"
-         data-round-status="{{ route('student.round.status') }}"
+         data-round-status="{{ route('student.round.status', ['mission' => $mission->id]) }}"
          data-mission-id="{{ $mission->id }}"
          data-mission-order="{{ $mission->order }}">
 
